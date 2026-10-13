@@ -1,0 +1,659 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101419">
+<title>SmartRoute Cự Ly</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Be+Vietnam+Pro:wght@400;500;600&display=swap&subset=vietnamese">
+<style>
+/* Layout: buồng lái – khung camera lớn bên trái, bảng đồng hồ bên phải; xếp dọc trên điện thoại.
+   Chủ ý một giao diện tối duy nhất (dùng khi lái xe, cả ban đêm). */
+:root{
+  color-scheme:dark;
+  --asphalt:#101419;      /* nền */
+  --panel:#171d24;        /* mặt bảng */
+  --line:#26303b;         /* viền */
+  --ink:#e8edf2;          /* chữ chính */
+  --muted:#8c99a6;        /* chữ phụ */
+  --sign:#1f5fbf;         /* xanh biển báo */
+  --safe:#3fbf7f; --warn:#f2b632; --danger:#ef4b3f;
+  --f-num:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"Be Vietnam Pro",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{background:var(--asphalt);margin:0}
+img{max-width:100%}
+body{color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45;padding-inline:16px;padding-block:12px 28px}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--warn);outline-offset:2px}
+
+.bar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;max-width:1240px;margin:0 auto 12px}
+.brand{display:flex;align-items:center;gap:10px}
+.brand b{font-family:var(--f-num);font-size:22px;letter-spacing:.02em;font-weight:700;display:block;line-height:1}
+.brand small{color:var(--muted);font-size:12px}
+.mark{width:30px;height:30px;border-radius:50%;background:var(--sign);border:3px solid #fff;display:grid;place-items:center;font-family:var(--f-num);font-weight:700;font-size:13px;color:#fff;flex:none}
+.seg{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:3px}
+.seg button{background:none;border:0;padding:7px 12px;border-radius:7px;color:var(--muted);font-weight:500;font-size:13px}
+.seg button[aria-selected="true"]{background:var(--ink);color:var(--asphalt)}
+
+.layout{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px;align-items:start}
+@media (max-width:900px){.layout{grid-template-columns:minmax(0,1fr)}}
+
+.viewport{position:relative;width:100%;aspect-ratio:16/9;max-width:100%;background:#05070a;border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+canvas#cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+.hud-dist{position:absolute;left:14px;top:10px;text-shadow:0 1px 3px #000a}
+.hud-dist .lbl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#cfd7df}
+.hud-dist .big{font-family:var(--f-num);font-weight:700;font-size:clamp(40px,8vw,72px);line-height:.95;font-variant-numeric:tabular-nums}
+.hud-dist .big small{font-size:.4em;font-weight:600;margin-left:4px}
+.sign{position:absolute;right:12px;top:10px;width:clamp(58px,9vw,78px);aspect-ratio:1;border-radius:50%;background:var(--sign);border:4px solid #fff;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;box-shadow:0 2px 8px #0008}
+.sign span{font-family:var(--f-num);font-weight:700;font-size:clamp(20px,3.4vw,28px);line-height:1}
+.sign small{font-size:10px;line-height:1.1;text-align:center}
+.band{position:absolute;left:0;right:0;bottom:0;padding:9px 14px;font-weight:600;font-size:clamp(13px,2.2vw,17px);display:flex;justify-content:space-between;gap:10px;background:#000a;transition:background .2s}
+.band[data-level="safe"]{background:color-mix(in srgb,var(--safe) 85%,#000)}
+.band[data-level="warn"]{background:var(--warn);color:#1a1405}
+.band[data-level="danger"]{background:var(--danger);animation:pulse .5s ease-in-out infinite alternate}
+@keyframes pulse{to{background:#b3261b}}
+@media (prefers-reduced-motion:reduce){.band[data-level="danger"]{animation:none}}
+.overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:20px;background:#0b0e12e6}
+.overlay p{max-width:46ch;color:#d5dde5;margin:0}
+.overlay .spin{width:28px;height:28px;border-radius:50%;border:3px solid #ffffff33;border-top-color:#fff;animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+.controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center}
+.btn{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:9px 14px;font-weight:600}
+.btn.primary{background:var(--ink);color:var(--asphalt);border-color:var(--ink)}
+.btn[aria-pressed="true"]{border-color:var(--warn);color:var(--warn)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.file{position:relative;overflow:hidden}
+.file input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.hint{color:var(--muted);font-size:12.5px;margin:8px 0 0}
+
+.panel{display:grid;gap:12px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;min-width:0}
+.card h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 10px;font-weight:600}
+.reads{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 14px}
+.read .k{font-size:12px;color:var(--muted)}
+.read .v{font-family:var(--f-num);font-size:30px;font-weight:600;line-height:1.05;font-variant-numeric:tabular-nums}
+.read .v small{font-size:15px;color:var(--muted);margin-left:3px;font-weight:500}
+.read .s{font-size:11.5px;color:var(--muted)}
+.range{display:grid;gap:6px;margin-top:12px}
+.range label{display:flex;justify-content:space-between;font-size:13px}
+.range output{font-family:var(--f-num);font-size:17px;font-weight:600}
+input[type=range]{width:100%;accent-color:var(--warn)}
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 14px;font-size:13px}
+.stats div{display:flex;justify-content:space-between;gap:6px;border-bottom:1px dashed var(--line);padding-bottom:4px}
+.stats b{font-family:var(--f-num);font-size:16px;font-variant-numeric:tabular-nums}
+.log{max-height:170px;overflow:auto;margin:10px 0 0;padding:0;list-style:none;font-size:12.5px;font-variant-numeric:tabular-nums}
+.log li{display:grid;grid-template-columns:62px 1fr auto;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)}
+.log .tag{font-weight:600}
+.log .tag.warn{color:var(--warn)} .log .tag.danger{color:var(--danger)}
+.log .empty{display:block;color:var(--muted)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.presets button{background:none;border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:12px;color:var(--muted)}
+.num{width:84px;background:var(--asphalt);border:1px solid var(--line);border-radius:8px;padding:7px 9px}
+details summary{cursor:pointer;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+details[open] summary{margin-bottom:10px}
+.law{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+.law td{padding:4px 0;border-bottom:1px solid var(--line)}
+.law td:last-child{text-align:right;font-family:var(--f-num);font-size:16px;font-weight:600}
+.law tr.on td{color:var(--warn)}
+.foot{max-width:1240px;margin:16px auto 0;color:var(--muted);font-size:12px}
+.foot p{margin:4px 0;max-width:110ch}
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="brand"><div class="mark" aria-hidden="true">SR</div><div><b>SmartRoute · Cự ly an toàn</b><small><a href="index.html" style="color:inherit">← Về SmartRoute MVP</a> · chức năng K5</small></div></div>
+  <div class="seg" role="tablist" aria-label="Nguồn hình ảnh">
+    <button role="tab" data-mode="sim" aria-selected="true">Mô phỏng</button>
+    <button role="tab" data-mode="video" aria-selected="false">Video</button>
+    <button role="tab" data-mode="cam" aria-selected="false">Camera trực tiếp</button>
+  </div>
+</header>
+
+<main class="layout">
+  <section>
+    <div class="viewport" id="vp">
+      <canvas id="cv"></canvas>
+      <div class="hud-dist"><div class="lbl" id="hudLbl">Xe phía trước</div><div class="big" id="hudDist">—<small>m</small></div></div>
+      <div class="sign" title="Cự ly tối thiểu ở tốc độ hiện tại"><span id="signVal">55</span><small>m tối<br>thiểu</small></div>
+      <div class="band" id="band" data-level="none"><span id="bandMsg">Đang chờ xe phía trước</span><span id="bandSub"></span></div>
+      <div class="overlay" id="overlay" hidden></div>
+    </div>
+    <div class="controls">
+      <button class="btn primary" id="btnRun">Tạm dừng</button>
+      <button class="btn" id="btnSound" aria-pressed="false">Bật âm thanh</button>
+      <label class="btn file" id="fileWrap" hidden>Chọn video…<input type="file" id="fileIn" accept="video/*"></label>
+      <button class="btn" id="btnCsv">Xuất nhật ký CSV</button>
+    </div>
+    <p class="hint" id="modeHint">Chế độ mô phỏng: một xe tải bám xe phía trước trên cao tốc. Kéo thanh tốc độ để xem cự ly tối thiểu thay đổi theo Thông tư 38/2024.</p>
+  </section>
+
+  <aside class="panel">
+    <div class="card">
+      <h2>Đồng hồ</h2>
+      <div class="reads">
+        <div class="read"><div class="k">Tốc độ xe mình</div><div class="v" id="rSpeed">80<small>km/h</small></div><div class="s" id="rSpeedSrc">Nguồn: mô phỏng</div></div>
+        <div class="read"><div class="k">Khoảng cách xe trước</div><div class="v" id="rDist">—<small>m</small></div><div class="s" id="rClass">Chưa thấy xe</div></div>
+        <div class="read"><div class="k">Cự ly tối thiểu</div><div class="v" id="rReq">55<small>m</small></div><div class="s" id="rBasis">TT 38/2024, Điều 11</div></div>
+        <div class="read"><div class="k">Thời gian bám</div><div class="v" id="rHw">—<small>giây</small></div><div class="s" id="rTtc">Va chạm dự kiến: —</div></div>
+      </div>
+      <div class="range" id="speedBox">
+        <label for="speedIn"><span>Tốc độ (nhập tay)</span><output id="speedOut">80 km/h</output></label>
+        <input type="range" id="speedIn" min="0" max="120" step="1" value="80">
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Thống kê phiên lái</h2>
+      <div class="stats">
+        <div><span>Thời gian giám sát</span><b id="sTime">0:00</b></div>
+        <div><span>Dưới cự ly</span><b id="sBelow">0%</b></div>
+        <div><span>Số lần cảnh báo</span><b id="sWarns">0</b></div>
+        <div><span>Bám gần nhất</span><b id="sMinHw">—</b></div>
+      </div>
+      <ul class="log" id="log"><li class="empty">Chưa có cảnh báo nào trong phiên này.</li></ul>
+    </div>
+
+    <div class="card">
+      <details>
+        <summary>Cài đặt & hiệu chỉnh</summary>
+        <div class="range" style="margin-top:0">
+          <label for="fovIn"><span>Góc nhìn ngang của camera</span><output id="fovOut">68°</output></label>
+          <input type="range" id="fovIn" min="40" max="150" step="1" value="68">
+          <div class="presets">
+            <button data-fov="68">Điện thoại 68°</button>
+            <button data-fov="100">Camera hành trình 100°</button>
+            <button data-fov="130">Góc rộng 130°</button>
+          </div>
+        </div>
+        <div class="range">
+          <label for="confIn"><span>Ngưỡng tin cậy nhận diện</span><output id="confOut">0,45</output></label>
+          <input type="range" id="confIn" min="0.25" max="0.8" step="0.05" value="0.45">
+        </div>
+        <div class="range">
+          <label for="calIn"><span>Hiệu chỉnh theo khoảng cách thật</span></label>
+          <div class="row"><input class="num" type="number" id="calIn" min="2" max="80" step="0.5" value="10" aria-label="Khoảng cách thật, mét"> <span>m</span> <button class="btn" id="btnCal" disabled>Hiệu chỉnh</button></div>
+          <p class="hint" style="margin:0">Đỗ xe cách một ô tô đúng số mét này (đo bằng thước), để camera thấy rõ đuôi xe rồi bấm Hiệu chỉnh. App sẽ tự tính lại góc nhìn.</p>
+        </div>
+      </details>
+    </div>
+
+    <div class="card">
+      <details>
+        <summary>Bảng cự ly – TT 38/2024/TT-BGTVT</summary>
+        <table class="law" id="lawTbl">
+          <tr data-i="0"><td>V = 60 km/h</td><td>35 m</td></tr>
+          <tr data-i="1"><td>60 &lt; V ≤ 80 km/h</td><td>55 m</td></tr>
+          <tr data-i="2"><td>80 &lt; V ≤ 100 km/h</td><td>70 m</td></tr>
+          <tr data-i="3"><td>100 &lt; V ≤ 120 km/h</td><td>100 m</td></tr>
+          <tr data-i="4"><td>Dưới 60 km/h (khuyến nghị)</td><td>2 giây</td></tr>
+        </table>
+        <p class="hint">Áp dụng khi đường khô, tầm nhìn tốt. Dưới 60 km/h thông tư không quy định số mét, app dùng quy tắc 2 giây để tham khảo.</p>
+      </details>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <p>Khoảng cách được ước lượng từ độ rộng đuôi xe trong ảnh (mô hình camera lỗ kim: ô tô 1,8 m, xe tải và xe khách 2,5 m, xe máy 0,75 m). Sai số tăng khi trời tối, mưa, xe bị che một phần hoặc camera góc rộng chưa hiệu chỉnh.</p>
+  <p>Đây là bản thử phục vụ cuộc thi, chỉ hỗ trợ cảnh báo, không thay thế thiết bị đo chuyên dụng và không dùng để kết luận vi phạm.</p>
+</footer>
+
+<video id="vid" playsinline muted loop hidden></video>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const cv = $('#cv'), ctx = cv.getContext('2d');
+const vid = $('#vid');
+const MODEL_URL = new URL('model/model.json', location.href).href;
+const TFJS = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js';
+const COCO = 'https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js';
+const WIDTH = {car:1.8, truck:2.5, bus:2.5, motorcycle:0.75, bicycle:0.6};
+const NAME = {car:'Ô tô', truck:'Xe tải', bus:'Xe khách', motorcycle:'Xe máy', bicycle:'Xe đạp'};
+const COLOR = {none:'#8c99a6', safe:'#3fbf7f', warn:'#f2b632', danger:'#ef4b3f'};
+const LEVEL_TXT = {warn:'Dưới cự ly', danger:'Quá gần'};
+
+const S = {
+  mode:'sim', running:true, sound:false,
+  speed:80, speedSrc:'mô phỏng', manualSpeed:true,
+  fov:68, conf:0.45,
+  dets:[], lead:null, dist:null, hist:[], lastSeen:0,
+  level:'none', ttc:null, hw:null, req:{d:55,i:1},
+  stats:{active:0, below:0, warns:0, minHw:null, minD:null},
+  log:[], lastTs:0, lastBeep:0, lastUi:0,
+};
+let model = null, modelLoading = null, busy = false;
+let audio = null, stream = null, geoId = null, gpsLast = null;
+let srcW = 1280, srcH = 720;
+
+/* ---------- Quy định ---------- */
+function required(v){
+  if (v >= 60 && v <= 60.5) return {d:35, i:0, basis:'TT 38/2024, Điều 11'};
+  if (v > 60 && v <= 80) return {d:55, i:1, basis:'TT 38/2024, Điều 11'};
+  if (v > 80 && v <= 100) return {d:70, i:2, basis:'TT 38/2024, Điều 11'};
+  if (v > 100) return {d:100, i:3, basis:'TT 38/2024, Điều 11'};
+  return {d:Math.max(5, Math.round(v/3.6*2)), i:4, basis:'Khuyến nghị 2 giây'};
+}
+const focal = () => (srcW/2) / Math.tan(S.fov*Math.PI/360);
+
+/* ---------- Mô phỏng ---------- */
+const sim = {c:document.createElement('canvas'), t:0, travel:0, D:75};
+sim.c.width = 1280; sim.c.height = 720;
+const sctx = sim.c.getContext('2d');
+const PLAN = [[0,78],[6,78],[11,46],[15,24],[18,22],[22,52],[27,82],[32,78]];
+function simTarget(t){
+  t = t % 32;
+  for (let k=0;k<PLAN.length-1;k++){
+    const [t0,d0]=PLAN[k],[t1,d1]=PLAN[k+1];
+    if (t>=t0 && t<=t1){ const u=(t-t0)/(t1-t0), e=(1-Math.cos(Math.PI*u))/2; return d0+(d1-d0)*e; }
+  }
+  return 78;
+}
+function simStep(dt){
+  sim.t += dt; sim.travel += S.speed/3.6*dt; sim.D = simTarget(sim.t);
+  const W=1280,H=720,hy=H*0.42,f=focal(),cam=1.35,cx=W/2;
+  const g=sctx;
+  const sky=g.createLinearGradient(0,0,0,hy); sky.addColorStop(0,'#1d2b3d'); sky.addColorStop(1,'#56677a');
+  g.fillStyle=sky; g.fillRect(0,0,W,hy);
+  g.fillStyle='#2b3a2f'; g.fillRect(0,hy,W,H-hy);
+  const P=(x,z)=>[cx+x*f/z, hy+cam*f/z];
+  // mặt đường
+  g.fillStyle='#3a3f45';
+  let a=P(-5.6,200),b=P(5.6,200),c=P(5.6,2),d=P(-5.6,2);
+  g.beginPath(); g.moveTo(...a); g.lineTo(...b); g.lineTo(...c); g.lineTo(...d); g.fill();
+  // vạch biên
+  g.strokeStyle='#e9e4d0'; g.lineWidth=3;
+  [[-5.4],[5.4]].forEach(([x])=>{const p=P(x,200),q=P(x,2); g.beginPath(); g.moveTo(...p); g.lineTo(...q); g.stroke();});
+  // vạch đứt
+  g.fillStyle='#f2efe4';
+  for (const x of [-1.85,1.85]){
+    const off = sim.travel % 12;
+    for (let z=2-off+12; z<200; z+=12){
+      const z1=z, z2=z+6; if (z1<2) continue;
+      const p1=P(x-0.08,z1),p2=P(x+0.08,z1),p3=P(x+0.08,z2),p4=P(x-0.08,z2);
+      g.beginPath(); g.moveTo(...p1); g.lineTo(...p2); g.lineTo(...p3); g.lineTo(...p4); g.fill();
+    }
+  }
+  // xe phía trước (xe tải thùng)
+  const Wv=2.5, Hv=3.2, sway=Math.sin(sim.t*0.7)*0.25;
+  const [bx,by]=P(sway,sim.D), w=Wv*f/sim.D, h=Hv*f/sim.D;
+  const x0=bx-w/2, y0=by-h;
+  g.fillStyle='#d9dde2'; g.fillRect(x0,y0,w,h*0.86);
+  g.fillStyle='#9aa3ad'; g.fillRect(x0,y0+h*0.86,w,h*0.06);
+  g.fillStyle='#1b1f24'; g.fillRect(x0+w*0.08,y0+h*0.92,w*0.18,h*0.08); g.fillRect(x0+w*0.74,y0+h*0.92,w*0.18,h*0.08);
+  g.fillStyle='#ff3b2f'; g.fillRect(x0+w*0.04,y0+h*0.8,w*0.1,h*0.05); g.fillRect(x0+w*0.86,y0+h*0.8,w*0.1,h*0.05);
+  g.fillStyle='#f5c400'; g.fillRect(x0+w*0.38,y0+h*0.72,w*0.24,h*0.07);
+  g.strokeStyle='#b8bec6'; g.lineWidth=Math.max(1,w*0.01); g.beginPath(); g.moveTo(bx,y0); g.lineTo(bx,y0+h*0.86); g.stroke();
+  // "nhận diện" có nhiễu như mô hình thật
+  const n = 1 + (Math.random()-0.5)*0.04;
+  S.dets = [{cls:'truck', score:0.9, x:x0, y:y0, w:w*n, h:h}];
+  srcW = W; srcH = H;
+}
+
+/* ---------- Mô hình nhận diện ---------- */
+function loadScript(src){
+  return new Promise((res,rej)=>{const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=()=>rej(new Error('Không tải được '+src)); document.head.appendChild(s);});
+}
+function loadModel(){
+  if (model) return Promise.resolve(model);
+  if (modelLoading) return modelLoading;
+  showOverlay('<div class="spin"></div><p>Đang tải mô hình nhận diện xe (khoảng 18 MB, chỉ tải lần đầu)…</p>');
+  modelLoading = (async()=>{
+    if (!window.tf) await loadScript(TFJS);
+    if (!window.cocoSsd) await loadScript(COCO);
+    try { await tf.setBackend('webgl'); } catch(e) {}
+    await tf.ready();
+    model = await cocoSsd.load({modelUrl: await modelFromText()});
+    hideOverlay();
+    return model;
+  })().catch(err=>{ modelLoading=null; showOverlay('<p>Không tải được mô hình nhận diện. Kiểm tra kết nối mạng và thư mục <b>model/</b> nằm cạnh file HTML.</p><p style="font-size:12px;color:#8c99a6">'+String(err.message||err)+'</p>'); throw err; });
+  return modelLoading;
+}
+async function modelFromText(){
+  const mj = await (await fetch(MODEL_URL)).json();
+  const base = new URL('.', MODEL_URL).href;
+  const paths = mj.weightsManifest.flatMap(g=>g.paths);
+  const parts = []; let total = 0;
+  for (let i=0;i<paths.length;i++){
+    const r = await fetch(base+paths[i]);
+    if (!r.ok) throw new Error('Thiếu file '+paths[i]);
+    const bin = atob((await r.text()).trim());
+    const u = new Uint8Array(bin.length);
+    for (let k=0;k<bin.length;k++) u[k] = bin.charCodeAt(k);
+    parts.push(u); total += u.length;
+    const pct = Math.round((i+1)/paths.length*100);
+    const o = document.querySelector('#overlay p'); if (o) o.textContent = 'Đang tải mô hình nhận diện xe… '+pct+'%';
+  }
+  const all = new Uint8Array(total); let off = 0;
+  for (const u of parts){ all.set(u, off); off += u.length; }
+  return tf.io.fromMemory({modelTopology: mj.modelTopology, weightSpecs: mj.weightsManifest.flatMap(g=>g.weights), weightData: all.buffer});
+}
+function runDetect(el){
+  if (busy || !model) return;
+  busy = true;
+  model.detect(el, 15, S.conf).then(res=>{
+    S.dets = res.filter(r=>WIDTH[r.class]).map(r=>({cls:r.class, score:r.score, x:r.bbox[0], y:r.bbox[1], w:r.bbox[2], h:r.bbox[3]}));
+  }).catch(()=>{}).finally(()=>{busy=false;});
+}
+
+/* ---------- Xử lý ---------- */
+function inEgoLane(d){
+  const nx=(d.x+d.w/2)/srcW, ny=(d.y+d.h)/srcH;
+  if (ny < 0.38) return false;
+  const half = 0.06 + (ny-0.38)/0.62*0.30;
+  return Math.abs(nx-0.5) <= half;
+}
+function process(now){
+  const cands = S.dets.filter(inEgoLane);
+  let lead = null;
+  for (const d of cands) if (!lead || d.y+d.h > lead.y+lead.h) lead = d;
+  S.lead = lead;
+  if (lead){
+    const raw = WIDTH[lead.cls]*focal()/Math.max(1, lead.w);
+    S.dist = S.dist==null ? raw : S.dist*0.6 + raw*0.4;
+    S.lastSeen = now;
+    S.hist.push([now/1000, S.dist]);
+    while (S.hist.length && now/1000 - S.hist[0][0] > 1.2) S.hist.shift();
+  } else if (now - S.lastSeen > 800){
+    S.dist = null; S.hist = [];
+  }
+  // vận tốc tiếp cận (hồi quy tuyến tính)
+  S.ttc = null;
+  if (S.hist.length >= 5){
+    const n=S.hist.length; let sx=0,sy=0,sxx=0,sxy=0;
+    for (const [t,dd] of S.hist){sx+=t;sy+=dd;sxx+=t*t;sxy+=t*dd;}
+    const den = n*sxx-sx*sx;
+    if (den>1e-6){ const slope=(n*sxy-sx*sy)/den; if (slope < -0.5 && S.dist) S.ttc = S.dist/(-slope); }
+  }
+  S.req = required(S.speed);
+  const v = S.speed/3.6;
+  S.hw = (S.dist!=null && v>0.5) ? S.dist/v : null;
+  let lvl = 'none';
+  if (S.dist!=null && S.speed >= 5){
+    const wasBad = S.level==='warn' || S.level==='danger';
+    if (S.dist < S.req.d*0.6 || (S.ttc!=null && S.ttc < 3)) lvl='danger';
+    else if (S.dist < S.req.d || (wasBad && S.dist < S.req.d*1.05)) lvl='warn';
+    else lvl='safe';
+  }
+  const bad = l => l==='warn' || l==='danger';
+  if (S.running && bad(lvl) && !bad(S.level)) { S.stats.warns++; addLog(lvl); S.lastBeep = 0; }
+  else if (S.running && lvl==='danger' && S.level==='warn') { addLog(lvl); S.lastBeep = 0; }
+  S.level = lvl;
+}
+function account(dt){
+  if (!S.running || S.dist==null || S.speed < 5) return;
+  S.stats.active += dt;
+  if (S.level==='warn' || S.level==='danger') S.stats.below += dt;
+  if (S.hw!=null && (S.stats.minHw==null || S.hw < S.stats.minHw)) S.stats.minHw = S.hw;
+  if (S.stats.minD==null || S.dist < S.stats.minD) S.stats.minD = S.dist;
+}
+function addLog(lvl){
+  const t = new Date();
+  S.log.push({time:t.toLocaleTimeString('vi-VN',{hour12:false}), iso:t.toISOString(), level:lvl, speed:Math.round(S.speed), dist:+S.dist.toFixed(1), req:S.req.d, ttc:S.ttc?+S.ttc.toFixed(1):'', cls:S.lead?NAME[S.lead.cls]:''});
+  if (S.log.length > 2000) S.log.shift();
+  renderLog();
+}
+function renderLog(){
+  const ul=$('#log');
+  if (!S.log.length){ ul.innerHTML='<li class="empty">Chưa có cảnh báo nào trong phiên này.</li>'; return; }
+  ul.innerHTML='';
+  S.log.slice(-40).reverse().forEach(e=>{
+    const li=document.createElement('li');
+    const a=document.createElement('span'); a.textContent=e.time;
+    const b=document.createElement('span'); b.innerHTML=`<span class="tag ${e.level}">${LEVEL_TXT[e.level]}</span> · ${vn(e.dist)} m / cần ${e.req} m`;
+    const c=document.createElement('span'); c.textContent=e.speed+' km/h';
+    li.append(a,b,c); ul.appendChild(li);
+  });
+}
+
+/* ---------- Âm thanh ---------- */
+function beep(freq, dur){
+  if (!audio || !S.sound) return;
+  const o=audio.createOscillator(), g=audio.createGain(), t=audio.currentTime;
+  o.type='square'; o.frequency.value=freq;
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.25,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.connect(g).connect(audio.destination); o.start(t); o.stop(t+dur+0.02);
+}
+function alarm(now){
+  if (!S.running) return;
+  if (S.level==='danger' && now-S.lastBeep > 420){ beep(1150,0.16); S.lastBeep=now; }
+  else if (S.level==='warn' && now-S.lastBeep > 1500){ beep(820,0.22); S.lastBeep=now; }
+}
+
+/* ---------- Vẽ ---------- */
+function fit(){
+  const r=cv.getBoundingClientRect(), dpr=Math.min(2, window.devicePixelRatio||1);
+  const w=Math.round(r.width*dpr), h=Math.round(r.height*dpr);
+  if (cv.width!==w || cv.height!==h){ cv.width=w; cv.height=h; }
+  const s=Math.min(w/srcW, h/srcH);
+  return {s, ox:(w-srcW*s)/2, oy:(h-srcH*s)/2, dpr};
+}
+function draw(src){
+  const {s,ox,oy,dpr}=fit();
+  ctx.fillStyle='#05070a'; ctx.fillRect(0,0,cv.width,cv.height);
+  if (src) ctx.drawImage(src, ox, oy, srcW*s, srcH*s);
+  // làn xe của mình
+  ctx.save(); ctx.translate(ox,oy); ctx.scale(s,s);
+  ctx.fillStyle='rgba(242,182,50,0.07)'; ctx.strokeStyle='rgba(242,182,50,0.35)'; ctx.lineWidth=2/s; ctx.setLineDash([10/s,8/s]);
+  const y1=srcH*0.38, hw1=srcW*0.06, hw2=srcW*0.36;
+  ctx.beginPath(); ctx.moveTo(srcW/2-hw1,y1); ctx.lineTo(srcW/2+hw1,y1); ctx.lineTo(srcW/2+hw2,srcH); ctx.lineTo(srcW/2-hw2,srcH); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.setLineDash([]);
+  for (const d of S.dets){
+    const isLead = d===S.lead;
+    ctx.strokeStyle = isLead ? COLOR[S.level==='none'?'safe':S.level] : 'rgba(255,255,255,0.45)';
+    ctx.lineWidth = (isLead?4:1.5)/s*dpr;
+    ctx.strokeRect(d.x,d.y,d.w,d.h);
+    if (isLead && S.dist!=null){
+      const label = `${NAME[d.cls]} · ${S.dist.toFixed(0)} m`;
+      const fs = 15*dpr/s; ctx.font = `600 ${fs}px "Be Vietnam Pro",system-ui,sans-serif`;
+      const tw = ctx.measureText(label).width + fs*0.8, th = fs*1.5;
+      const ly = Math.max(0, d.y - th - 2/s);
+      ctx.fillStyle = ctx.strokeStyle; ctx.fillRect(d.x, ly, tw, th);
+      ctx.fillStyle = S.level==='warn' ? '#1a1405' : '#fff';
+      ctx.fillText(label, d.x + fs*0.4, ly + fs*1.1);
+    }
+  }
+  ctx.restore();
+}
+
+/* ---------- Giao diện ---------- */
+const fmtTime = s => { s=Math.floor(s); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); };
+const vn = (x,d=1) => x.toFixed(d).replace('.',',');
+function ui(){
+  const d=S.dist;
+  $('#hudDist').innerHTML = (d==null?'—':Math.round(d)) + '<small>m</small>';
+  $('#hudDist').style.color = d==null ? '' : COLOR[S.level==='none'?'safe':S.level];
+  $('#signVal').textContent = S.req.d;
+  $('#rSpeed').innerHTML = Math.round(S.speed)+'<small>km/h</small>';
+  $('#rSpeedSrc').textContent = 'Nguồn: '+S.speedSrc;
+  $('#rDist').innerHTML = (d==null?'—':vn(d))+'<small>m</small>';
+  $('#rClass').textContent = S.lead ? NAME[S.lead.cls]+' cùng làn' : 'Chưa thấy xe cùng làn';
+  $('#rReq').innerHTML = S.req.d+'<small>m</small>';
+  $('#rBasis').textContent = S.req.basis;
+  $('#rHw').innerHTML = (S.hw==null?'—':vn(S.hw))+'<small>giây</small>';
+  $('#rTtc').textContent = 'Va chạm dự kiến: ' + (S.ttc==null ? '—' : 'sau '+vn(S.ttc)+' giây');
+  document.querySelectorAll('#lawTbl tr').forEach(tr=>tr.classList.toggle('on', +tr.dataset.i===S.req.i));
+  const band=$('#band'); band.dataset.level=S.level;
+  let msg='Đang chờ xe phía trước', sub='';
+  if (S.dist!=null && S.speed<5){ msg='Xe đang đứng yên'; }
+  else if (S.level==='safe'){ msg='Giữ cự ly tốt'; sub='dư '+Math.round(S.dist-S.req.d)+' m'; }
+  else if (S.level==='warn'){ msg='Dưới cự ly tối thiểu – giảm tốc'; sub='thiếu '+Math.round(S.req.d-S.dist)+' m'; }
+  else if (S.level==='danger'){ msg='QUÁ GẦN – PHANH NHẸ, GIÃN KHOẢNG CÁCH'; sub=S.ttc?('va chạm sau '+vn(S.ttc)+' s'):''; }
+  $('#bandMsg').textContent=msg; $('#bandSub').textContent=sub;
+  const st=S.stats;
+  $('#sTime').textContent=fmtTime(st.active);
+  $('#sBelow').textContent=(st.active>0?Math.round(st.below/st.active*100):0)+'%';
+  $('#sWarns').textContent=st.warns;
+  $('#sMinHw').textContent=st.minHw==null?'—':vn(st.minHw)+' s';
+  $('#btnCal').disabled = !S.lead;
+}
+
+/* ---------- Vòng lặp ---------- */
+function frameSource(){
+  if (S.mode==='sim') return sim.c;
+  if ((S.mode==='video'||S.mode==='cam') && vid.readyState>=2 && vid.videoWidth){ srcW=vid.videoWidth; srcH=vid.videoHeight; return vid; }
+  return null;
+}
+function loop(ts){
+  requestAnimationFrame(loop);
+  const dt = S.lastTs ? Math.min(0.1,(ts-S.lastTs)/1000) : 0; S.lastTs = ts;
+  if (S.mode==='sim' && S.running) simStep(dt);
+  const src = frameSource();
+  if (src && src===vid && S.running && model) runDetect(vid);
+  if (!src && S.mode!=='sim') S.dets=[];
+  process(ts); account(dt); alarm(ts);
+  draw(src);
+  if (ts - S.lastUi > 100){ ui(); S.lastUi = ts; }
+}
+
+/* ---------- Overlay ---------- */
+function showOverlay(html){ const o=$('#overlay'); o.innerHTML=html; o.hidden=false; }
+function hideOverlay(){ $('#overlay').hidden=true; }
+
+/* ---------- Chế độ ---------- */
+function resetSession(){
+  S.stats={active:0,below:0,warns:0,minHw:null,minD:null}; S.log=[]; renderLog();
+  S.dist=null; S.hist=[]; S.dets=[]; S.lead=null; S.level='none';
+}
+function stopSources(){
+  if (stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+  if (geoId!=null && navigator.geolocation){ navigator.geolocation.clearWatch(geoId); geoId=null; }
+  vid.pause(); vid.removeAttribute('src'); vid.srcObject=null; vid.load();
+}
+function setManualSpeed(on, val){
+  S.manualSpeed=on; $('#speedBox').hidden=!on;
+  if (on){ if (val!=null){ $('#speedIn').value=val; } S.speed=+$('#speedIn').value; $('#speedOut').textContent=S.speed+' km/h'; }
+}
+function setMode(m){
+  stopSources(); resetSession(); hideOverlay();
+  S.mode=m;
+  document.querySelectorAll('.seg button').forEach(b=>b.setAttribute('aria-selected', String(b.dataset.mode===m)));
+  $('#fileWrap').hidden = m!=='video';
+  if (m==='sim'){
+    S.running=true; S.speedSrc='mô phỏng'; setManualSpeed(true,80);
+    $('#modeHint').textContent='Chế độ mô phỏng: một xe tải bám xe phía trước trên cao tốc. Kéo thanh tốc độ để xem cự ly tối thiểu thay đổi theo Thông tư 38/2024.';
+  } else if (m==='video'){
+    S.running=false; S.speedSrc='nhập tay'; setManualSpeed(true,70);
+    if (S.fov<90) setFov(100);
+    showOverlay('<p><b>Chọn một video quay từ camera hành trình</b> (quay thẳng phía trước, thấy rõ đuôi xe phía trước).</p><p style="font-size:12.5px;color:#8c99a6">Video không cung cấp tốc độ, hãy kéo thanh tốc độ cho khớp với lúc quay.</p>');
+    $('#modeHint').textContent='Chế độ video: app chạy nhận diện xe trên từng khung hình. Video chỉ xử lý trên máy bạn, không tải lên đâu cả.';
+  } else {
+    S.running=false; S.speedSrc='GPS'; setManualSpeed(false);
+    if (S.fov>90) setFov(68);
+    showOverlay('<p><b>Gắn điện thoại lên kính lái, camera sau hướng thẳng phía trước.</b></p><p style="font-size:12.5px;color:#8c99a6">Bấm Bắt đầu để mở camera sau và GPS. Nếu trình duyệt chặn camera (ví dụ khi xem trong Claude), hãy mở bản HTML đã đưa lên GitHub Pages, hoặc dùng chế độ Video.</p>');
+    $('#modeHint').textContent='Chế độ camera trực tiếp: dùng camera sau và GPS của điện thoại. Màn hình được giữ sáng trong khi chạy.';
+  }
+  updateRunBtn();
+}
+function updateRunBtn(){
+  const b=$('#btnRun'); b.disabled=false;
+  if (S.mode==='cam' && !stream){ b.textContent='Bắt đầu'; return; }
+  if (S.mode==='video' && !vid.src){ b.textContent='Bắt đầu'; b.disabled=true; return; }
+  b.disabled=false; b.textContent = S.running ? 'Tạm dừng' : 'Bắt đầu';
+}
+
+async function startCamera(){
+  try{
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('unsupported');
+    stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720}}, audio:false});
+  }catch(e){
+    showOverlay('<p><b>Không mở được camera.</b></p><p style="font-size:12.5px;color:#8c99a6">Trang này hoặc trình duyệt đang chặn quyền camera. Trong bản xem trên Claude, camera luôn bị chặn: hãy mở bản HTML đã đưa lên GitHub Pages (HTTPS) trên điện thoại, hoặc chuyển sang chế độ Video.</p>');
+    stream=null; updateRunBtn(); return;
+  }
+  vid.srcObject=stream; await vid.play().catch(()=>{});
+  hideOverlay();
+  try{ await loadModel(); }catch(e){ return; }
+  startGps();
+  try{ await navigator.wakeLock?.request('screen'); }catch(e){}
+  S.running=true; updateRunBtn();
+}
+function startGps(){
+  if (!navigator.geolocation){ S.speedSrc='nhập tay (không có GPS)'; setManualSpeed(true,60); return; }
+  geoId = navigator.geolocation.watchPosition(p=>{
+    let v = p.coords.speed;
+    if (v==null && gpsLast){
+      const dt=(p.timestamp-gpsLast.t)/1000;
+      if (dt>0.5){ const R=6371000, toR=Math.PI/180;
+        const dLat=(p.coords.latitude-gpsLast.lat)*toR, dLon=(p.coords.longitude-gpsLast.lon)*toR;
+        const a=Math.sin(dLat/2)**2+Math.cos(gpsLast.lat*toR)*Math.cos(p.coords.latitude*toR)*Math.sin(dLon/2)**2;
+        v = 2*R*Math.asin(Math.sqrt(a))/dt; }
+    }
+    gpsLast={t:p.timestamp, lat:p.coords.latitude, lon:p.coords.longitude};
+    if (v!=null && !S.manualSpeed){ const kmh=v*3.6; S.speed = S.speed*0.5 + kmh*0.5; S.speedSrc='GPS (±'+Math.round(p.coords.accuracy)+' m)'; }
+  }, ()=>{ S.speedSrc='nhập tay (GPS bị chặn)'; setManualSpeed(true,60); }, {enableHighAccuracy:true, maximumAge:1000, timeout:15000});
+}
+
+/* ---------- Sự kiện ---------- */
+document.querySelectorAll('.seg button').forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));
+$('#btnRun').addEventListener('click', async ()=>{
+  if (S.mode==='cam' && !stream){ await startCamera(); return; }
+  S.running=!S.running;
+  if (S.mode==='video'){ S.running ? vid.play().catch(()=>{}) : vid.pause(); }
+  updateRunBtn();
+});
+$('#btnSound').addEventListener('click', ()=>{
+  if (!audio){ try{ audio = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
+  audio?.resume?.();
+  S.sound=!S.sound;
+  const b=$('#btnSound'); b.setAttribute('aria-pressed',String(S.sound)); b.textContent=S.sound?'Tắt âm thanh':'Bật âm thanh';
+  if (S.sound) beep(880,0.12);
+});
+$('#fileIn').addEventListener('change', async e=>{
+  const f=e.target.files[0]; if (!f) return;
+  resetSession();
+  vid.srcObject=null; vid.src=URL.createObjectURL(f);
+  try{ await loadModel(); }catch(err){ return; }
+  hideOverlay();
+  await vid.play().catch(()=>{});
+  S.running=true; updateRunBtn();
+});
+$('#speedIn').addEventListener('input', e=>{ S.speed=+e.target.value; $('#speedOut').textContent=S.speed+' km/h'; });
+function setFov(v){ S.fov=Math.round(v); $('#fovIn').value=S.fov; $('#fovOut').textContent=S.fov+'°'; }
+$('#fovIn').addEventListener('input', e=>setFov(+e.target.value));
+document.querySelectorAll('.presets button').forEach(b=>b.addEventListener('click',()=>setFov(+b.dataset.fov)));
+$('#confIn').addEventListener('input', e=>{ S.conf=+e.target.value; $('#confOut').textContent=vn(S.conf,2); });
+$('#btnCal').addEventListener('click', ()=>{
+  const D=+$('#calIn').value; if (!S.lead || !(D>0)) return;
+  const f = D*S.lead.w/WIDTH[S.lead.cls];
+  const fov = 2*Math.atan((srcW/2)/f)*180/Math.PI;
+  setFov(Math.max(20,Math.min(170,fov))); S.dist=null; S.hist=[];
+  $('#btnCal').textContent='Đã hiệu chỉnh'; setTimeout(()=>$('#btnCal').textContent='Hiệu chỉnh',1500);
+});
+$('#btnCsv').addEventListener('click', async ()=>{
+  const head='thoi_gian,muc_canh_bao,toc_do_kmh,khoang_cach_m,cu_ly_toi_thieu_m,va_cham_du_kien_s,loai_xe_truoc\n';
+  const rows=S.log.map(e=>[e.iso,LEVEL_TXT[e.level],e.speed,e.dist,e.req,e.ttc,e.cls].join(',')).join('\n');
+  const text='﻿'+head+rows+'\n';
+  const name='smartroute-cu-ly-'+new Date().toISOString().slice(0,10)+'.csv';
+  const b=$('#btnCsv');
+  let dl=null;
+  try{ dl = window.claude?.use ? await window.claude.use('downloads') : null; }catch(e){}
+  if (dl){
+    try{ await dl.save({filename:name, data:text}); b.textContent='Đã xuất CSV'; }
+    catch(e){ b.textContent = e?.code==='declined' ? 'Đã huỷ xuất' : 'Không xuất được'; }
+  } else {
+    const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type:'text/csv'})); a.download=name;
+    document.body.appendChild(a); a.click(); a.remove(); b.textContent='Đã xuất CSV';
+  }
+  setTimeout(()=>b.textContent='Xuất nhật ký CSV',1800);
+});
+document.addEventListener('visibilitychange', async ()=>{
+  if (!document.hidden && S.mode==='cam' && stream){ try{ await navigator.wakeLock?.request('screen'); }catch(e){} }
+});
+
+setMode('sim');
+requestAnimationFrame(loop);
+window.__sr = S;
+})();
+</script>
+</body>
+</html>

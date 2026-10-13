@@ -1,0 +1,1229 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>SmartRoute MVP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap&subset=vietnamese">
+<style>
+/* Layout: thanh điều khiển mô phỏng cố định trên cùng; mỗi vai trò (Điều phối / Tài xế / Đối soát / Cự ly) là một màn hình.
+   Màu lấy từ biển báo đường bộ: xanh biển chỉ dẫn làm màu chính, vàng – đỏ cho cảnh báo. */
+:root{
+  --bg:#eef1f4; --surface:#ffffff; --surface2:#f4f6f8; --line:#d8dee5; --ink:#141a21; --muted:#5b6672;
+  --accent:#1f5fbf; --accent-ink:#ffffff; --accent-soft:#e3ecfa;
+  --safe:#1d8a57; --warn:#a86b00; --danger:#c3352b; --unk:#7445b8; --jam:#c77d00; --rest:#55708c;
+  --road:#c9d1da; --road-hw:#9fb0c2;
+  --f-num:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"Be Vietnam Pro",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --r:12px;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0f1318; --surface:#171d24; --surface2:#1d242d; --line:#2a333e; --ink:#e7ecf1; --muted:#95a2af;
+  --accent:#5b92e6; --accent-ink:#0b1220; --accent-soft:#1b2a40;
+  --safe:#44c487; --warn:#f0b43c; --danger:#f0615a; --unk:#ad8ae8; --jam:#f2a541; --rest:#8fa7c0;
+  --road:#2f3945; --road-hw:#465567; color-scheme:dark; } }
+:root[data-theme="dark"]{
+  --bg:#0f1318; --surface:#171d24; --surface2:#1d242d; --line:#2a333e; --ink:#e7ecf1; --muted:#95a2af;
+  --accent:#5b92e6; --accent-ink:#0b1220; --accent-soft:#1b2a40;
+  --safe:#44c487; --warn:#f0b43c; --danger:#f0615a; --unk:#ad8ae8; --jam:#f2a541; --rest:#8fa7c0;
+  --road:#2f3945; --road-hw:#465567; color-scheme:dark; }
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{background:var(--bg);margin:0}
+body{color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45;padding-inline:16px;padding-block:0 32px}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1,h2,h3{text-wrap:balance;margin:0}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+
+/* thanh trên */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--bg);margin-inline:-16px;padding:10px 16px 0;border-bottom:1px solid var(--line)}
+.top-in{max-width:1320px;margin:0 auto;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between}
+.brand{display:flex;gap:10px;align-items:center}
+.mark{width:32px;height:32px;border-radius:50%;background:var(--accent);border:3px solid var(--surface);box-shadow:0 0 0 1px var(--line);display:grid;place-items:center;color:#fff;font-family:var(--f-num);font-weight:700;font-size:13px;flex:none}
+.brand b{display:block;font-family:var(--f-num);font-size:22px;line-height:1;letter-spacing:.01em}
+.brand small{color:var(--muted);font-size:12px}
+.clock{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.clock .time{font-family:var(--f-num);font-size:30px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.clock .day{font-size:12px;color:var(--muted);line-height:1.2}
+.pill-btn{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:600}
+.pill-btn[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.tabs{max-width:1320px;margin:8px auto 0;display:flex;gap:2px;overflow-x:auto}
+.tabs button{border:0;background:none;padding:10px 14px;font-weight:600;color:var(--muted);border-bottom:3px solid transparent;white-space:nowrap}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.tabs button .k{font-family:var(--f-num);font-weight:700;color:var(--accent);margin-right:5px}
+
+main{max-width:1320px;margin:16px auto 0}
+.view{display:grid;gap:16px}
+.cols{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:1080px){.cols{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;min-width:0}
+.card-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.card-h h2{font-size:16px}
+.eyebrow{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.sub{color:var(--muted);font-size:12.5px}
+.stack{display:grid;gap:16px;min-width:0}
+
+/* form */
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px 12px}
+.field{display:grid;gap:4px;min-width:0}
+.field label{font-size:12px;color:var(--muted);font-weight:500}
+.field select,.field input{width:100%;background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:8px 9px;min-width:0}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:8px 13px;font-weight:600;font-size:13px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.ghost{background:none}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+/* chips */
+.chip{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600;white-space:nowrap;
+  background:color-mix(in srgb,var(--c,var(--muted)) 14%,transparent);color:var(--c,var(--muted))}
+.chip::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.c-safe{--c:var(--safe)} .c-warn{--c:var(--warn)} .c-danger{--c:var(--danger)} .c-unk{--c:var(--unk)} .c-rest{--c:var(--rest)} .c-muted{--c:var(--muted)} .c-accent{--c:var(--accent)} .c-jam{--c:var(--jam)}
+
+/* verdict */
+.verdict{border-radius:10px;padding:12px 14px;display:grid;gap:4px;border:1px solid}
+.verdict b{font-size:15px}
+.verdict.good{border-color:color-mix(in srgb,var(--safe) 45%,transparent);background:color-mix(in srgb,var(--safe) 9%,transparent)}
+.verdict.tight{border-color:color-mix(in srgb,var(--warn) 50%,transparent);background:color-mix(in srgb,var(--warn) 10%,transparent)}
+.verdict.hard{border-color:color-mix(in srgb,var(--danger) 50%,transparent);background:color-mix(in srgb,var(--danger) 9%,transparent)}
+
+/* strip */
+.strip-wrap{overflow-x:auto;margin-inline:-4px}
+.strip{display:block;width:100%;min-width:640px;height:auto}
+.strip text{font-family:var(--f-body);fill:var(--muted);font-size:15px}
+.strip .lbl-b{fill:var(--ink);font-weight:600}
+.strip .road{fill:var(--road)} .strip .road.hw{fill:var(--road-hw)}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:600;text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+td.n{font-family:var(--f-num);font-size:16px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tbl-wrap{overflow-x:auto}
+tr.sel td{background:var(--accent-soft)}
+tbody tr.click{cursor:pointer}
+tbody tr.click:hover td{background:var(--surface2)}
+
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
+.opt{border:1px solid var(--line);border-radius:10px;padding:12px;display:grid;gap:6px;align-content:start;background:var(--surface2)}
+.opt.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.opt h3{font-size:14px}
+.opt .meta{font-size:12.5px;color:var(--muted)}
+.opt .eta{font-family:var(--f-num);font-size:20px;font-weight:600}
+
+.heat{display:grid;grid-template-columns:repeat(24,minmax(0,1fr));gap:2px}
+.heat button{border:0;border-radius:3px;height:28px;padding:0;font-family:var(--f-num);font-size:12px;color:#fff;font-weight:600}
+.heat .good{background:var(--safe)} .heat .tight{background:var(--warn)} .heat .hard{background:var(--danger)}
+@media (max-width:640px){.heat{grid-template-columns:repeat(12,minmax(0,1fr))}}
+.heat button[aria-current="true"]{outline:2px solid var(--ink);outline-offset:1px}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
+.legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px;background:var(--c)}
+
+.bar{height:6px;border-radius:3px;background:var(--surface2);overflow:hidden;margin-top:4px;min-width:70px}
+.bar i{display:block;height:100%;background:var(--c,var(--safe))}
+
+.feed{list-style:none;margin:0;padding:0;display:grid;max-height:340px;overflow:auto}
+.feed li{display:grid;grid-template-columns:44px minmax(0,1fr);gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px}
+.feed .tm{font-family:var(--f-num);font-size:15px;color:var(--muted)}
+.feed .act{margin-top:6px}
+.empty{color:var(--muted);font-size:13px;padding:6px 0}
+
+/* app tài xế */
+.drv{display:grid;grid-template-columns:minmax(0,380px) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:860px){.drv{grid-template-columns:minmax(0,1fr)}}
+.phone{background:#0d1116;color:#e9eef3;border-radius:28px;padding:18px 16px 20px;border:6px solid #262d36;max-width:380px;width:100%;margin:0 auto;display:grid;gap:12px;box-shadow:0 10px 30px #0003}
+.phone .p-top{display:flex;justify-content:space-between;font-size:12px;color:#9aa6b2}
+.phone .ring{position:relative;width:200px;height:200px;margin:4px auto 0}
+.phone .ring svg{width:100%;height:100%}
+.phone .ring .mid{position:absolute;inset:0;display:grid;place-content:center;text-align:center}
+.phone .ring .big{font-family:var(--f-num);font-size:58px;font-weight:700;line-height:.95;font-variant-numeric:tabular-nums}
+.phone .ring .cap{font-size:12px;color:#9aa6b2}
+.p-status{text-align:center;font-weight:700;font-size:15px;padding:8px;border-radius:10px}
+.p-card{background:#171d25;border:1px solid #2a323d;border-radius:14px;padding:12px;display:grid;gap:4px}
+.p-card .lbl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#8d99a6}
+.p-card .ttl{font-weight:700;font-size:15px}
+.p-card .meta{font-size:12.5px;color:#aeb8c3}
+.p-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.p-btn{border:0;border-radius:12px;padding:12px;font-weight:700;background:#27303b;color:#e9eef3}
+.p-btn.main{background:#e9eef3;color:#0d1116}
+.p-btn:disabled{opacity:.4;cursor:not-allowed}
+.p-alert{border-radius:12px;padding:10px 12px;font-weight:600;font-size:13.5px}
+.ok-txt{color:#4fd08f} .bad-txt{color:#ff7a70}
+.p-form{display:grid;gap:8px;background:#171d25;border:1px solid #2a323d;border-radius:14px;padding:12px}
+.p-form label{font-size:12px;color:#aeb8c3;display:grid;gap:4px}
+.p-form select,.p-form input[type=number]{background:#0d1116;border:1px solid #333d49;border-radius:8px;padding:8px;color:#e9eef3}
+.p-form .chk{display:flex;gap:8px;align-items:flex-start;font-size:12.5px}
+.trip-pick{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+
+/* đối soát */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.kpi{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--surface2)}
+.kpi .v{font-family:var(--f-num);font-size:30px;font-weight:700;line-height:1.05;font-variant-numeric:tabular-nums}
+.kpi .k{font-size:12.5px;color:var(--muted)}
+.dossier{display:grid;gap:14px}
+.dossier dl{display:grid;grid-template-columns:150px minmax(0,1fr);gap:6px 12px;margin:0;font-size:13px}
+.dossier dt{color:var(--muted)}
+.dossier dd{margin:0}
+.chart{display:block;width:100%;min-width:520px;height:auto}
+.chart text{font-family:var(--f-body);fill:var(--muted);font-size:11px}
+.pts{display:flex;gap:2px}
+.who{min-width:150px}
+.plate{white-space:nowrap;font-weight:700}
+.pts i{width:7px;height:12px;border-radius:2px;background:var(--safe)}
+.pts i.off{background:var(--line)}
+.pts.low i:not(.off){background:var(--danger)}
+.pts.mid i:not(.off){background:var(--warn)}
+.note{font-size:12.5px;color:var(--muted);border-left:3px solid var(--line);padding-left:10px}
+.k5{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:center}
+@media (max-width:860px){.k5{grid-template-columns:minmax(0,1fr)}}
+.foot{max-width:1320px;margin:20px auto 0;color:var(--muted);font-size:12px;display:grid;gap:4px}
+.foot p{margin:0;max-width:120ch}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+
+<header class="top">
+  <div class="top-in">
+    <div class="brand"><div class="mark" aria-hidden="true">SR</div><div><b>SmartRoute</b><small>MVP quản trị giờ lái · tuyến thí điểm Hà Nội – Vinh</small></div></div>
+    <div class="clock" aria-label="Đồng hồ mô phỏng">
+      <div><div class="time" id="clk">07:40</div></div>
+      <div class="day" id="clkDay">Hôm nay<br>giờ mô phỏng</div>
+      <button class="pill-btn" id="btnPlay" aria-pressed="false">Tạm dừng</button>
+      <div class="row" role="group" aria-label="Tốc độ mô phỏng" id="speedGrp">
+        <button class="pill-btn" data-mult="30" aria-pressed="false">×30</button>
+        <button class="pill-btn" data-mult="60" aria-pressed="true">×60</button>
+        <button class="pill-btn" data-mult="180" aria-pressed="false">×180</button>
+      </div>
+      <button class="pill-btn" id="btnSkip">+30 phút</button>
+    </div>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-view="dispatch" aria-selected="true"><span class="k">K1</span>Điều phối</button>
+    <button role="tab" data-view="driver" aria-selected="false"><span class="k">K2·K3</span>App tài xế</button>
+    <button role="tab" data-view="audit" aria-selected="false"><span class="k">K3·K4</span>Đối soát & hồ sơ</button>
+    <button role="tab" data-view="gap" aria-selected="false"><span class="k">K5</span>Cự ly an toàn</button>
+  </nav>
+</header>
+
+<main>
+  <!-- ĐIỀU PHỐI -->
+  <section class="view" id="v-dispatch">
+    <div class="cols">
+      <div class="stack">
+        <div class="card">
+          <div class="card-h"><h2>Lập lệnh vận chuyển</h2><span class="sub">Kế hoạch nghỉ được tính ngay khi bạn sửa lệnh</span></div>
+          <div class="form">
+            <div class="field"><label for="fVeh">Xe</label><select id="fVeh"></select></div>
+            <div class="field"><label for="fD1">Tài xế chính</label><select id="fD1"></select></div>
+            <div class="field"><label for="fD2">Tài xế phụ</label><select id="fD2"></select></div>
+            <div class="field"><label for="fDir">Chiều tuyến</label><select id="fDir"><option value="S">Hà Nội → Vinh</option><option value="N">Vinh → Hà Nội</option></select></div>
+            <div class="field"><label for="fDep">Giờ xuất phát</label><input id="fDep" type="time" value="06:00" step="300"></div>
+            <div class="field"><label for="fPre">Đã lái liên tục trước đó (phút)</label><input id="fPre" type="number" min="0" max="200" step="5" value="0"></div>
+            <div class="field"><label for="fBuf">Khoảng an toàn trước mốc 4 giờ (phút)</label><input id="fBuf" type="number" min="0" max="60" step="5" value="30"></div>
+            <div class="field"><label for="fCus">Khách hàng / hàng hóa</label><input id="fCus" type="text" value="Cảng Cửa Lò · container 40'"></div>
+          </div>
+        </div>
+        <div class="card" id="planCard"></div>
+        <div class="card">
+          <div class="card-h"><h2>Bản đồ vùng mù theo giờ xuất phát</h2><span class="sub" id="heatSub"></span></div>
+          <div class="heat" id="heat"></div>
+          <div class="legend"><span style="--c:var(--safe)">Có trạm hợp lệ trong cửa sổ nghỉ</span><span style="--c:var(--warn)">Chỉ có trạm sát mốc 4 giờ</span><span style="--c:var(--danger)">Không có trạm trước mốc 4 giờ</span></div>
+          <p class="sub" style="margin:8px 0 0">Mỗi ô là một giờ xuất phát (0–23 giờ) với xe và khoảng an toàn đang chọn. Bấm vào ô để thử giờ đó. Dùng bảng này khi thương lượng lại khung giờ giao nhận với chủ hàng.</p>
+        </div>
+      </div>
+      <div class="stack">
+        <div class="card">
+          <div class="card-h"><h2>Theo dõi đội xe</h2><span class="sub">Xếp theo rủi ro vi phạm trong 60 phút tới</span></div>
+          <div class="tbl-wrap"><table id="fleet"></table></div>
+        </div>
+        <div class="card" id="tripCard"></div>
+        <div class="card">
+          <div class="card-h"><h2>Thông báo</h2><span class="sub">Đồng bộ với app tài xế</span></div>
+          <ul class="feed" id="feed"></ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TÀI XẾ -->
+  <section class="view" id="v-driver" hidden>
+    <div class="trip-pick" id="tripPick" role="group" aria-label="Chọn xe"></div>
+    <div class="drv">
+      <div class="phone" id="phone"></div>
+      <div class="stack">
+        <div class="card" id="drvPlan"></div>
+        <div class="card"><div class="card-h"><h2>Nhật ký ca lái</h2><span class="sub">Bằng chứng bàn giao độc lập với thẻ nhận dạng</span></div><div class="tbl-wrap"><table id="shiftTbl"></table></div></div>
+        <div class="card"><div class="card-h"><h2>Dữ liệu GSHT gần nhất</h2><span class="sub">Bản tin mỗi phút: vị trí, tốc độ, thẻ lái xe</span></div><div class="tbl-wrap"><table id="gshtTbl"></table></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ĐỐI SOÁT -->
+  <section class="view" id="v-audit" hidden>
+    <div class="card">
+      <div class="card-h"><h2>Báo cáo quản trị</h2>
+        <div class="row" role="group" aria-label="Chọn ngày">
+          <button class="pill-btn" data-day="-1" aria-pressed="true" id="dayY">Hôm qua</button>
+          <button class="pill-btn" data-day="0" aria-pressed="false" id="dayT">Hôm nay (đến giờ mô phỏng)</button>
+          <button class="btn" id="btnScan">Quét đối soát lại</button>
+        </div>
+      </div>
+      <div class="kpis" id="kpis"></div>
+    </div>
+    <div class="cols">
+      <div class="stack">
+        <div class="card">
+          <div class="card-h"><h2>Kết quả quét đối soát</h2><span class="sub" id="scanSub"></span></div>
+          <div class="tbl-wrap"><table id="cases"></table></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h2>Bảng chấm giờ lái theo người</h2><button class="btn" id="btnCsv">Xuất CSV</button></div>
+          <div class="tbl-wrap"><table id="timesheet"></table></div>
+          <div id="teamWarn"></div>
+        </div>
+      </div>
+      <div class="card" id="dossier"></div>
+    </div>
+  </section>
+
+  <!-- K5 -->
+  <section class="view" id="v-gap" hidden>
+    <div class="card k5">
+      <div style="display:grid;gap:10px">
+        <span class="eyebrow">Module K5</span>
+        <h2 style="font-size:22px">Cảnh báo cự ly an toàn bằng camera</h2>
+        <p style="margin:0;max-width:60ch">Nhận diện xe cùng làn phía trước, ước lượng khoảng cách từ độ rộng đuôi xe, lấy tốc độ từ GPS và so với bảng cự ly của Thông tư 38/2024/TT-BGTVT (35 / 55 / 70 / 100 m). Cảnh báo bằng âm thanh khi bám quá gần, ghi nhật ký theo phiên lái.</p>
+        <p class="sub" style="margin:0">Có 3 chế độ: mô phỏng, video camera hành trình, camera trực tiếp. Camera trực tiếp chỉ chạy khi mở trang trên điện thoại qua HTTPS (bản GitHub Pages).</p>
+        <div class="row"><a class="btn primary" id="k5Link" href="cu-ly.html">Mở module Cự ly an toàn</a></div>
+      </div>
+      <svg viewBox="0 0 400 230" role="img" aria-label="Minh hoạ: xe phía trước cách 42 mét, cự ly tối thiểu 55 mét" style="width:100%;height:auto;max-width:100%">
+        <rect x="0" y="0" width="400" height="230" rx="12" fill="#0d1116"/>
+        <polygon points="170,80 230,80 380,230 20,230" fill="#2f3640"/>
+        <rect x="171" y="98" width="58" height="50" fill="#d9dde2"/>
+        <rect x="174" y="140" width="10" height="4" fill="#ff3b2f"/><rect x="216" y="140" width="10" height="4" fill="#ff3b2f"/>
+        <rect x="166" y="93" width="68" height="60" fill="none" stroke="#f0b43c" stroke-width="3"/>
+        <rect x="166" y="72" width="92" height="18" fill="#f0b43c"/><text x="172" y="85" font-size="12" font-weight="700" fill="#1a1405" font-family="Be Vietnam Pro, sans-serif">Xe tải · 42 m</text>
+        <circle cx="356" cy="40" r="26" fill="#1f5fbf" stroke="#fff" stroke-width="4"/><text x="356" y="46" text-anchor="middle" font-size="18" font-weight="700" fill="#fff" font-family="Barlow Condensed, sans-serif">55</text>
+        <rect x="0" y="198" width="400" height="32" fill="#f0b43c"/><text x="14" y="219" font-size="13" font-weight="700" fill="#1a1405" font-family="Be Vietnam Pro, sans-serif">Dưới cự ly tối thiểu – giảm tốc</text>
+        <text x="16" y="44" font-size="38" font-weight="700" fill="#f0b43c" font-family="Barlow Condensed, sans-serif">42 m</text>
+      </svg>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <p>Dữ liệu mô phỏng phục vụ trình diễn. Vị trí 5 trạm dừng nghỉ lấy theo báo chí (12/2025); sức chứa, giờ mở cửa của trạm tạm, mức độ quá tải theo giờ và 2 điểm dừng ngoài cao tốc là giả định, cần khảo sát. Lý trình các đoạn cao tốc là gần đúng.</p>
+  <p>Chuỗi lái liên tục được tính theo QCVN 31:2014/BGTVT: dừng, đỗ từ 15 phút trở lên thì ngắt chuỗi. Giới hạn 4 giờ theo Điều 64 Luật Trật tự, an toàn giao thông đường bộ 2024 (sửa đổi bởi Luật 118/2025/QH15). Mức phạt tham chiếu Nghị định 168/2024/NĐ-CP.</p>
+</footer>
+
+<script>
+/* ================= SmartRoute engine: dữ liệu tuyến, lập kế hoạch, mô phỏng, đối soát ================= */
+const LIMIT = 240;          // phút lái liên tục tối đa (Luật TTATGTĐB 2024, Điều 64)
+const MIN_BREAK = 15;       // dừng ≥15 phút thì ngắt chuỗi (QCVN 31:2014/BGTVT)
+const KM0 = 176, KM1 = 468, L = KM1 - KM0;
+
+const SEGS = [
+  {from:176, to:182, name:'Nội đô Hà Nội – nút Pháp Vân', short:'Hà Nội', type:'urban', v:26, rushV:14, rush:'hn'},
+  {from:182, to:211, name:'Pháp Vân – Cầu Giẽ', short:'Pháp Vân', type:'hw', v:72, rushV:40, rush:'hn'},
+  {from:211, to:261, name:'Cầu Giẽ – Ninh Bình', short:'Cầu Giẽ', type:'hw', v:76},
+  {from:261, to:276, name:'Cao Bồ – Mai Sơn', short:'Cao Bồ', type:'hw', v:74},
+  {from:276, to:339, name:'Mai Sơn – QL45', short:'Mai Sơn', type:'hw', v:74},
+  {from:339, to:382, name:'QL45 – Nghi Sơn', short:'QL45', type:'hw', v:72},
+  {from:382, to:432, name:'Nghi Sơn – Diễn Châu', short:'Nghi Sơn', type:'hw', v:72},
+  {from:432, to:460, name:'Diễn Châu – nút giao Vinh', short:'Diễn Châu', type:'hw', v:70},
+  {from:460, to:468, name:'Vào TP Vinh', short:'Vinh', type:'urban', v:30, rushV:18, rush:'vinh'},
+];
+
+/* dir: 'S' = Hà Nội → Vinh (lý trình tăng, phải tuyến); 'N' = Vinh → Hà Nội (trái tuyến) */
+const STOPS = [
+  {id:'vec227', name:'Trạm dừng nghỉ VEC', area:'Cầu Giẽ – Ninh Bình', km:227, dir:'both', kind:'official', cap:24, open:[0,24], src:'Báo chí 12/2025 (đang khai thác)'},
+  {id:'xc269', name:'Trạm Xuân Cương', area:'Cao Bồ – Mai Sơn', km:269, dir:'S', kind:'official', cap:30, open:[0,24], src:'Báo chí 12/2025 – phải tuyến'},
+  {id:'xk269', name:'Trạm Xuân Khiêm', area:'Cao Bồ – Mai Sơn', km:269, dir:'N', kind:'official', cap:30, open:[0,24], src:'Báo chí 12/2025 – trái tuyến'},
+  {id:'t329', name:'Trạm tạm Km329+700', area:'Mai Sơn – QL45', km:329.7, dir:'both', kind:'temp', cap:8, open:[6,22], src:'Báo chí 12/2025 – trạm tạm; sức chứa, giờ mở: giả định'},
+  {id:'t427', name:'Trạm tạm Km427+035', area:'Nghi Sơn – Diễn Châu', km:427.035, dir:'both', kind:'temp', cap:8, open:[6,22], src:'Báo chí 12/2025 – trạm tạm; sức chứa, giờ mở: giả định'},
+];
+const EXITS = [
+  {id:'x339', name:'Nút giao QL45 – bãi đỗ cây xăng', area:'Rời cao tốc', km:339, dir:'both', kind:'exit', cap:10, open:[0,24], detour:14, src:'Giả định – cần khảo sát'},
+  {id:'x382', name:'Nút giao Nghi Sơn – bãi đỗ cây xăng', area:'Rời cao tốc', km:382, dir:'both', kind:'exit', cap:10, open:[0,24], detour:16, src:'Giả định – cần khảo sát'},
+];
+const ALL_STOPS = STOPS.concat(EXITS);
+const OCC = [.35,.3,.3,.3,.35,.45,.55,.6,.6,.65,.75,.9,.92,.8,.65,.6,.65,.8,.85,.75,.6,.5,.45,.4];
+
+const VT = {
+  container:{name:'Đầu kéo container', dv:-4},
+  truck15:{name:'Xe tải 15 tấn', dv:-2},
+  truck8:{name:'Xe tải 8 tấn', dv:0},
+};
+
+const DRIVERS = [
+  {id:'d1', name:'Nguyễn Văn Hùng', cls:'FC', points:12},
+  {id:'d2', name:'Trần Minh Đức', cls:'FC', points:10, note:'Bị trừ 2 điểm 08/2026'},
+  {id:'d3', name:'Lê Quang Vinh', cls:'FC', points:12},
+  {id:'d4', name:'Phạm Văn Sơn', cls:'FC', points:8, note:'Bị trừ 4 điểm trong 2026'},
+  {id:'d5', name:'Đỗ Thanh Tùng', cls:'C', points:12},
+  {id:'d6', name:'Hoàng Văn Nam', cls:'FC', points:4, note:'Bị trừ 8 điểm trong 2026'},
+  {id:'d7', name:'Vũ Đình Khải', cls:'C', points:12},
+];
+const VEHICLES = [
+  {id:'v1', plate:'29C-123.45', vt:'container'},
+  {id:'v2', plate:'29H-456.78', vt:'truck15'},
+  {id:'v3', plate:'37C-089.12', vt:'container'},
+  {id:'v4', plate:'29C-777.01', vt:'truck8'},
+  {id:'v5', plate:'30H-220.55', vt:'truck15'},
+];
+const drvName = id => id ? (DRIVERS.find(d=>d.id===id)||{name:id}).name : 'Chưa xác định';
+const vehOf = id => VEHICLES.find(v=>v.id===id);
+
+/* ---------- hình học tuyến ---------- */
+const kmAt = (dir,s) => dir==='S' ? KM0+s : KM1-s;
+const sAt = (dir,km) => dir==='S' ? km-KM0 : KM1-km;
+const serves = (st,dir) => st.dir==='both' || st.dir===dir;
+function segAt(km){ for (const g of SEGS) if (km>=g.from && km<g.to) return g; return SEGS[SEGS.length-1]; }
+const mod1440 = m => ((m%1440)+1440)%1440;
+function inRush(m, zone){
+  if (!zone) return false;
+  const h = mod1440(m)/60;
+  if (zone==='hn') return (h>=6.5 && h<8.75) || (h>=16.5 && h<19);
+  return (h>=6.75 && h<8) || (h>=17 && h<18.5);
+}
+function baseSpeed(km, m, vt){
+  const g = segAt(km);
+  const v = (inRush(m,g.rush) ? g.rushV : g.v) + (g.type==='hw' ? VT[vt].dv : 0);
+  return Math.max(8, v);
+}
+function occAt(st, m){ const k = st.kind==='temp' ? 1.05 : 0.9; return Math.min(1, OCC[Math.floor(mod1440(m)/60)]*k); }
+function isOpen(st, m){ const h = mod1440(m)/60; return h>=st.open[0] && h<st.open[1]; }
+function stopValid(st, m){ return isOpen(st,m) && occAt(st,m) < 0.9; }
+function freeSlots(st, m){ return Math.max(0, Math.round(st.cap*(1-occAt(st,m)))); }
+function whyInvalid(st, m){ if (!isOpen(st,m)) return 'chưa mở cửa/đã đóng'; if (occAt(st,m)>=0.9) return 'dự báo kín chỗ'; return ''; }
+
+/* ---------- lập kế hoạch dừng nghỉ (M1) ---------- */
+function interpS(path, s){
+  if (s<=path[0].s) return path[0];
+  for (let i=1;i<path.length;i++) if (path[i].s>=s){ const a=path[i-1], b=path[i], u=(s-a.s)/((b.s-a.s)||1); return {s, t:a.t+(b.t-a.t)*u, chain:a.chain+(b.chain-a.chain)*u}; }
+  return path[path.length-1];
+}
+function interpC(path, c){
+  if (c<=path[0].chain) return path[0];
+  for (let i=1;i<path.length;i++) if (path[i].chain>=c){ const a=path[i-1], b=path[i], u=(c-a.chain)/((b.chain-a.chain)||1); return {s:a.s+(b.s-a.s)*u, t:a.t+(b.t-a.t)*u, chain:c}; }
+  return path[path.length-1];
+}
+function runPath(dir, vt, s, t, chain, until){
+  const path=[{s,t,chain}];
+  while (s < L-1e-9 && !until(s,t,chain)){
+    const ds = Math.min(0.5, L-s), v = baseSpeed(kmAt(dir,s+ds/2), t, vt), dt = ds/v*60;
+    s += ds; t += dt; chain += dt; path.push({s,t,chain});
+  }
+  return path;
+}
+function planTrip(o){
+  const dir=o.dir, vt=o.vt, buf=o.buffer??30, win=o.win??60, rest=o.rest??20, hand=10, nDrv=o.drivers||1;
+  const pool = (o.allowExits ? ALL_STOPS : STOPS).filter(x=>serves(x,dir)).map(x=>({...x, s:sAt(dir,x.km)})).sort((a,b)=>a.s-b.s);
+  const forced = new Set(o.forced||[]);
+  let s=0, t=o.dep, chain=o.pre||0, drv=0;
+  const ev=[], blind=[], viol=[], trace=[{s,t,chain}];
+  let guard=0;
+  const commit = (p, kind, path, backup) => {
+    const a = interpS(path, p.s);
+    for (const q of path) if (q.s<=p.s && q.s>s) trace.push(q);
+    trace.push({s:p.s,t:a.t,chain:a.chain});
+    const swap = nDrv===2, dwell = (swap?hand:rest) + (p.detour||0);
+    ev.push({stop:p, kind, s:p.s, km:p.km, arr:a.t, dep:a.t+dwell, dwell, chainAtArr:a.chain, swap, from:drv, to:swap?1-drv:drv,
+             occ:occAt(p,a.t), free:freeSlots(p,a.t), backup});
+    if (swap) drv = 1-drv;
+    s=p.s; t=a.t+dwell; chain=0;
+    trace.push({s,t,chain:0,rest:true});
+  };
+  while (s < L-1e-6 && guard++ < 30){
+    const path = runPath(dir, vt, s, t, chain, (ss,tt,cc)=>cc>=LIMIT);
+    const end = path[path.length-1];
+    const fStop = pool.find(p=>forced.has(p.id) && p.s>s+0.3 && p.s<=end.s && !ev.some(e=>e.stop.id===p.id));
+    if (fStop){ commit(fStop,'forced',path,null); continue; }
+    if (end.chain < LIMIT){ for (const q of path.slice(1)) trace.push(q); s=L; t=end.t; chain=end.chain; break; }
+    const lo = Math.max(chain, LIMIT-buf-win), hi = LIMIT-buf;
+    const A = interpC(path, lo), B = interpC(path, hi);
+    const inWin = pool.filter(p=>p.s>s+0.3 && p.s>=A.s && p.s<=B.s).map(p=>({p, a:interpS(path,p.s)}));
+    const cands = inWin.filter(c=>stopValid(c.p, c.a.t));
+    const before = pool.filter(p=>p.s>s+0.3 && p.s<A.s).map(p=>({p, a:interpS(path,p.s)})).filter(c=>stopValid(c.p,c.a.t));
+    if (cands.length){
+      const best = cands[cands.length-1];
+      const bk = cands.length>1 ? cands[cands.length-2].p : (before.length ? before[before.length-1].p : null);
+      commit(best.p, 'window', path, bk);
+      continue;
+    }
+    const tight = pool.filter(p=>p.s>B.s && p.s<=end.s).map(p=>({p, a:interpS(path,p.s)})).filter(c=>stopValid(c.p,c.a.t));
+    blind.push({type: tight.length ? 'tight' : 'hard', sA:A.s, sB:B.s, s4:end.s, t4:end.t, kmA:kmAt(dir,A.s), kmB:kmAt(dir,B.s), km4:kmAt(dir,end.s), tA:A.t, tB:B.t,
+                invalid:inWin.map(c=>({stop:c.p, why:whyInvalid(c.p,c.a.t)})), from:s,
+                tightStop: tight.length ? tight[0].p : null, margin: tight.length ? LIMIT - tight[0].a.chain : null});
+    if (o.policy==='early' && before.length){ commit(before[before.length-1].p, 'early', path, before.length>1?before[before.length-2].p:null); continue; }
+    if (tight.length){ commit(tight[0].p, 'tight', path, before.length?before[before.length-1].p:null); continue; }
+    // giữ nguyên: chạy tiếp tới trạm hợp lệ kế tiếp → vi phạm
+    const ext = runPath(dir, vt, s, t, chain, (ss,tt)=>{ const nx = pool.find(p=>p.s>end.s && p.s<=ss && stopValid(p,tt)); return !!nx; });
+    const last = ext[ext.length-1];
+    const nx = pool.find(p=>p.s>end.s && p.s<=last.s+1e-6 && stopValid(p, interpS(ext,p.s).t));
+    if (nx){
+      const a = interpS(ext, nx.s);
+      viol.push({s:end.s, km:kmAt(dir,end.s), t:end.t, over:a.chain-LIMIT, at:nx});
+      commit(nx, 'late', ext, null);
+    } else {
+      viol.push({s:end.s, km:kmAt(dir,end.s), t:end.t, over:last.chain-LIMIT, at:null});
+      for (const q of ext.slice(1)) trace.push(q); s=L; t=last.t; chain=last.chain;
+    }
+  }
+  const drive = trace.reduce((acc,q,i)=> i && !q.rest && !trace[i-1].rest ? acc+(q.t-trace[i-1].t) : acc, 0);
+  const risky = ev.some(e=>e.kind==='tight');
+  return {o, dir, ev, blind, viol, trace, eta:t, ok:viol.length===0, risky, good:viol.length===0 && !risky, nStops:ev.length};
+}
+function planOptions(o){
+  const base = planTrip({...o, policy:'strict'});
+  const out = [];
+  if (base.good) return {base, opts:out};
+  const A = planTrip({...o, policy:'early'});
+  if (A.good) out.push({key:'early', title:'Chèn điểm nghỉ sớm hơn', plan:A,
+    detail:`Nghỉ tại ${A.ev.filter(e=>e.kind==='early').map(e=>e.stop.name).join(', ')||'trạm trước vùng mù'}`, cost:'Không phát sinh chi phí'});
+  let B=null, off=0;
+  for (const d of [15,-15,30,-30,45,-45,60,-60,90,-90,120,-120,150,-150,180,-180]){
+    const p = planTrip({...o, dep:o.dep+d, policy:'strict'});
+    if (p.good){ B=p; off=d; break; }
+  }
+  out.push(B ? {key:'shift', title:'Dịch giờ xuất phát', plan:B, offset:off, detail:`Xuất phát ${off>0?'muộn':'sớm'} ${Math.abs(off)} phút`, cost:'Cần thương lượng giờ giao với chủ hàng'}
+             : {key:'shift', title:'Dịch giờ xuất phát', plan:null, detail:'Không có giờ xuất phát nào trong ±3 giờ khắc phục được: vùng mù nằm ở vị trí cố định trên tuyến', cost:''});
+  if ((o.drivers||1)===1){
+    const C = planTrip({...o, drivers:2, policy:'early'});
+    if (C.good) out.push({key:'two', title:'Bố trí hai tài xế', plan:C, detail:`Đổi tài tại ${C.ev.map(e=>e.stop.name).join(', ')}`, cost:'Thêm 1 tài xế phụ (khoảng 600.000đ/chuyến, giả định)'});
+  }
+  const D = planTrip({...o, policy:'strict', allowExits:true});
+  if (D.good) out.push({key:'exit', title:'Rời cao tốc nghỉ tại nút giao', plan:D, detail:`Nghỉ tại ${D.ev.filter(e=>e.stop.kind==='exit').map(e=>e.stop.name).join(', ')}`, cost:'Dữ liệu điểm dừng ngoài cao tốc là giả định, cần khảo sát'});
+  return {base, opts:out};
+}
+
+/* ---------- chuỗi lái từ dữ liệu GSHT (cùng một logic cho thời gian thực và đối soát) ---------- */
+function computeChains(recs, key){
+  const chains=[]; let cur=null, stopRun=0;
+  for (const r of recs){
+    const who = r[key] || null;
+    if (r.v >= 2){
+      if (cur && cur.driver!==who){ cur.end = r.t; chains.push(cur); cur=null; }
+      if (!cur) cur = {driver:who, start:r.t, end:r.t, startKm:r.km, endKm:r.km, trip:r.trip};
+      cur.end = r.t+1; cur.endKm = r.km; stopRun=0;
+    } else if (cur){
+      stopRun++;
+      if (stopRun >= MIN_BREAK){ chains.push(cur); cur=null; stopRun=0; }
+    }
+  }
+  if (cur){ cur.open = true; chains.push(cur); }
+  chains.forEach(c=>c.dur = c.end-c.start);
+  return chains;
+}
+
+/* ---------- mô phỏng vận hành (dữ liệu GSHT giả lập mỗi phút) ---------- */
+const JAMS = [];   // {day, dir, kmFrom, kmTo, start, end, factor, src}
+function jamAt(day, dir, km, t){
+  for (const j of JAMS) if (j.day===day && j.dir===dir && km>=Math.min(j.kmFrom,j.kmTo) && km<=Math.max(j.kmFrom,j.kmTo) && t>=j.start && t<j.end) return j;
+  return null;
+}
+function makeTrip(spec){
+  const veh = vehOf(spec.veh);
+  const o = {dir:spec.dir, dep:spec.dep, vt:veh.vt, drivers:spec.drivers.length, buffer:spec.buffer??30, win:60, policy:spec.policy||'early', forced:spec.forced, allowExits:spec.allowExits};
+  const plan = spec.plan || planTrip(o);
+  const base = spec.basePlan || planTrip({...o, policy:'strict'});
+  return {id:spec.id, day:spec.day, veh:veh.id, plate:veh.plate, vt:veh.vt, dir:spec.dir, dep:spec.dep, drivers:spec.drivers, plan, base,
+    noPlan:!!spec.noPlan, skipCheckIn:!!spec.skipCheckIn, customer:spec.customer||'', cargo:spec.cargo||'',
+    s:0, v:0, mode:'wait', evIdx:0, dwellUntil:0, cur:null, card:null, shifts:[], records:[], lastRec:-1, done:false, doneAt:null,
+    alerts:[], flags:{}, chainKeyStart:null, seed:(spec.id.charCodeAt(1)||7)*1.7, earlyAdds:0};
+}
+function startShift(tr, d, t, opt={}){
+  tr.cur = d; if (opt.card!==false) tr.card = d;
+  tr.shifts.push({driver:d, start:t, startKm:kmAt(tr.dir,tr.s), end:null, endKm:null, photo:opt.photo||null, card:opt.card!==false, by:opt.by||'Tự động theo lệnh'});
+}
+function endShift(tr, t){
+  const sh = [...tr.shifts].reverse().find(x=>x.end==null);
+  if (sh){ sh.end=t; sh.endKm=kmAt(tr.dir,tr.s); }
+  tr.cur = null;
+}
+function stepTrip(tr, t0, dt, hooks){
+  const t = t0+dt;
+  if (tr.done || t < tr.dep){ return; }
+  if (tr.mode==='wait'){ tr.mode='drive'; startShift(tr, tr.drivers[0], tr.dep); hooks&&hooks.event(tr,'depart',t); }
+  if (tr.mode==='dwell'){
+    tr.v = 0;
+    if (t >= tr.dwellUntil){
+      const e = tr.plan.ev[tr.evIdx-1];
+      if (e && e.swap){
+        const nd = tr.drivers[e.to] || tr.drivers[0];
+        if (tr.skipCheckIn && !tr.flags.fixed){ tr.cur = null; /* thẻ vẫn của tài xế cũ */ }
+        else startShift(tr, nd, t);
+      }
+      tr.mode='drive'; hooks&&hooks.event(tr,'resume',t);
+    }
+  } else if (tr.mode==='drive'){
+    const km = kmAt(tr.dir, tr.s);
+    const jam = jamAt(tr.day, tr.dir, km, t);
+    let v = baseSpeed(km, t, tr.vt) * (jam ? jam.factor : 1) * (1 + 0.05*Math.sin(t/9 + tr.seed));
+    let ds = v*dt/60;
+    const e = tr.plan.ev[tr.evIdx];
+    if (e && tr.s + ds >= e.s){
+      ds = Math.max(0, e.s - tr.s); tr.s = e.s; tr.evIdx++; tr.mode='dwell';
+      tr.dwellUntil = t + Math.max(e.dwell, e.swap ? 10 : MIN_BREAK + 5);
+      if (e.swap) endShift(tr, t);
+      hooks&&hooks.event(tr,'arrive',t,e);
+      v = 0;
+    } else if (tr.s + ds >= L){
+      tr.s = L; tr.done = true; tr.doneAt = t; tr.mode='done'; endShift(tr,t); v = 0; hooks&&hooks.event(tr,'finish',t);
+    } else tr.s += ds;
+    tr.v = v;
+  }
+  const m = Math.floor(t);
+  if (m > tr.lastRec && t >= tr.dep){
+    tr.lastRec = m;
+    tr.records.push({t:m, s:tr.s, km:kmAt(tr.dir,tr.s), v:tr.mode==='drive'?tr.v:0, app:tr.cur, gsht:tr.card, trip:tr.id, jam:!!jamAt(tr.day,tr.dir,kmAt(tr.dir,tr.s),m)});
+  }
+}
+function runDay(trips, from, to, dt, hooks){
+  for (let t=from; t<to; t+=dt) for (const tr of trips) stepTrip(tr, t, dt, hooks);
+}
+
+/* thời gian dự kiến tới vị trí s2 với tình hình giao thông hiện tại */
+function etaTo(tr, s2, t){
+  let s=tr.s, m=0;
+  while (s < s2-1e-6){
+    const ds=Math.min(1, s2-s), km=kmAt(tr.dir,s+ds/2), jam=jamAt(tr.day,tr.dir,km,t); /* chỉ biết ùn tắc đang diễn ra */
+    m += ds/(baseSpeed(km,t+m,tr.vt)*(jam?jam.factor:1))*60; s+=ds;
+  }
+  return m;
+}
+function nextValidStop(tr, t){
+  const pool = STOPS.filter(x=>serves(x,tr.dir)).map(x=>({...x, s:sAt(tr.dir,x.km)})).filter(x=>x.s>tr.s+0.2).sort((a,b)=>a.s-b.s);
+  for (const p of pool){ const e=etaTo(tr,p.s,t); if (stopValid(p,t+e)) return {stop:p, eta:e, dist:p.s-tr.s}; }
+  return null;
+}
+function liveChain(tr, t){
+  const ch = computeChains(tr.records, 'app');
+  const last = ch[ch.length-1];
+  if (!last || !last.open) return {min:0, chain:null};
+  return {min: last.dur, chain:last};
+}
+
+/* ---------- đối soát (M4) ---------- */
+function reconcile(trips){
+  const out=[];
+  for (const tr of trips){
+    const g = computeChains(tr.records,'gsht'), a = computeChains(tr.records,'app');
+    for (const c of g){
+      if (c.dur <= LIMIT) continue;
+      const over = c.dur - LIMIT;
+      const appOverlap = a.filter(x=>x.driver===c.driver && x.end>c.start && x.start<c.end);
+      const appMax = appOverlap.reduce((m,x)=>Math.max(m,x.dur),0);
+      const recs = tr.records.filter(r=>r.t>=c.start && r.t<c.end);
+      const jamRecs = recs.filter(r=>r.jam && r.v>=2);
+      let jamDelay = 0;
+      if (jamRecs.length){ for (const r of jamRecs){ const vb=baseSpeed(r.km,r.t,tr.vt); jamDelay += 1 - r.v/vb; } }
+      const unknown = a.filter(x=>x.driver===null && x.end>c.start && x.start<c.end).reduce((m,x)=>m+x.dur,0);
+      let cls, reason;
+      if (appMax <= LIMIT && (unknown>0 || appOverlap.length)){
+        cls='data'; reason = unknown>0
+          ? `Theo ca lái trên app, ${drvName(c.driver)} chỉ lái ${fmtDur(appMax)} liên tục; ${fmtDur(unknown)} sau đó xe chạy khi chưa ai nhận ca và thẻ nhận dạng không được thay. Dữ liệu GSHT gán sai người lái.`
+          : `Ca lái trên app cho thấy chuỗi lái thực tế dài nhất ${fmtDur(appMax)}.`;
+      } else if (jamDelay >= over*0.8){
+        cls='objective'; reason = `Ùn tắc kéo dài trong chuỗi lái làm chậm khoảng ${Math.round(jamDelay)} phút, lớn hơn phần vượt ${Math.round(over)} phút. Có dữ liệu tốc độ và vị trí làm bằng chứng.`;
+      } else {
+        cls='plan'; reason = tr.noPlan ? 'Lệnh được lập thủ công, không có kế hoạch nghỉ. Tuyến rơi vào vùng mù tuân thủ.' : 'Kế hoạch nghỉ không bảo đảm mốc 4 giờ.';
+      }
+      out.push({id:`${tr.day<0?'HQ':'HN'}-${tr.plate.replace(/[^0-9A-Z]/g,'')}-${c.start}`, trip:tr, chain:c, over, cls, reason, appMax, unknown, jamDelay, recs});
+    }
+  }
+  return out;
+}
+const fmtDur = m => { m=Math.max(0,Math.round(m)); return `${Math.floor(m/60)} giờ ${String(m%60).padStart(2,'0')} phút`; };
+
+(() => {
+'use strict';
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s??'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const hm = m => { m = Math.round(m); const x = mod1440(m); return String(Math.floor(x/60)).padStart(2,'0')+':'+String(x%60).padStart(2,'0'); };
+const dur = m => { m = Math.max(0, Math.round(m)); return Math.floor(m/60)+':'+String(m%60).padStart(2,'0'); };
+const kmTxt = km => { const k = Math.floor(km+1e-9), r = Math.round((km-k)*1000); return 'Km'+k+(r ? '+'+String(r).padStart(3,'0') : ''); };
+const vn = (x,d=0) => Number(x).toFixed(d).replace('.',',');
+const DIRS = {S:'Hà Nội → Vinh', N:'Vinh → Hà Nội'};
+const DEST = {S:'Vinh', N:'Hà Nội'};
+
+VEHICLES.push({id:'v6', plate:'29C-310.20', vt:'container'}, {id:'v7', plate:'29H-888.66', vt:'truck15'});
+
+const today = new Date(), yday = new Date(today.getTime()-864e5);
+const dstr = d => d.toLocaleDateString('vi-VN', {weekday:'long', day:'2-digit', month:'2-digit', year:'numeric'});
+
+const APP = {view:'dispatch', t:300, mult:60, playing:true, sel:'t1', drvSel:'t1', feed:[], feedY:[], feedVer:0, renderedFeed:-1,
+  auditDay:-1, cases:[], caseSel:null, applied:null, res:null, newCount:0, lastUi:0, lastReal:0, handover:null, tripsT:[], tripsY:[], tuned:[]};
+const tripById = id => APP.tripsT.find(t=>t.id===id) || APP.tripsY.find(t=>t.id===id);
+
+/* ================= thông báo ================= */
+function push(feed, lvl, tr, text, action, data, t){
+  const it = {id:Math.random().toString(36).slice(2,9), t:t??APP.t, lvl, plate:tr?tr.plate:'', trip:tr?tr.id:null, text, action, data, done:false};
+  feed.unshift(it); if (feed.length>120) feed.pop();
+  if (feed===APP.feed) APP.feedVer++;
+  return it;
+}
+function hooksFor(feed){
+  return {event(tr, kind, t, e){
+    if (kind==='depart') push(feed,'info',tr,`Xuất phát. ${drvName(tr.cur)} nhận ca tại ${kmTxt(kmAt(tr.dir,0))}.`,null,null,t);
+    if (kind==='arrive') push(feed,'info',tr, e.swap ? `Vào ${e.stop.name} để đổi tài. ${drvName(tr.drivers[e.from])} kết ca.` : `Vào ${e.stop.name}, nghỉ ${Math.max(e.dwell,20)} phút. Dừng đủ 15 phút thì chuỗi lái được ngắt.`,null,null,t);
+    if (kind==='resume'){ const e2 = tr.plan.ev[tr.evIdx-1]; if (e2 && e2.swap && tr.cur) push(feed,'ok',tr,`${drvName(tr.cur)} nhận ca, tiếp tục hành trình.`,null,null,t); }
+    if (kind==='finish') push(feed,'ok',tr,`Đã đến ${DEST[tr.dir]}.`,null,null,t);
+  }};
+}
+function checkAlerts(tr, t, feed){
+  if (tr.done || t < tr.dep) return;
+  const f = tr.flags;
+  if (tr.mode==='drive' && tr.cur===null && tr.v>2){
+    if (f.unkSince==null) f.unkSince = t;
+    if (t-f.unkSince>=2 && !f.unkAlert){ f.unkAlert = true; push(feed,'unk',tr,`Xe đang chạy nhưng chưa có tài xế nhận ca. Thẻ trên thiết bị GSHT vẫn là của ${drvName(tr.card)}, giờ lái sẽ bị gán sai người.`,'checkin',null,t); }
+  } else if (tr.cur){ f.unkSince = null; f.unkAlert = false; }
+  const km = kmAt(tr.dir,tr.s), jam = jamAt(tr.day,tr.dir,km,t);
+  f.jams = f.jams || {};
+  if (jam && tr.mode==='drive'){ const k = JAMS.indexOf(jam); if (!f.jams[k]){ f.jams[k]=true; push(feed,'warn',tr,`Ùn tắc ${kmTxt(Math.min(jam.kmFrom,jam.kmTo))}–${kmTxt(Math.max(jam.kmFrom,jam.kmTo))}, tốc độ khoảng ${Math.round(baseSpeed(km,t,tr.vt)*jam.factor)} km/h. Bắt đầu lưu dữ liệu giao thông làm bằng chứng.`,null,null,t); } }
+  const lc = liveChain(tr,t); if (!lc.chain) return;
+  f.c = f.c || {}; const key = lc.chain.start+'|'+lc.chain.driver; const cf = f.c[key] = f.c[key] || {};
+  const rem = LIMIT - lc.min;
+  if (tr.mode==='drive') for (const th of [60,30,15]) if (rem<=th && rem>th-5 && !cf[th]){ cf[th]=true; push(feed, th===15?'danger':th===30?'warn':'info', tr, `${lc.chain.driver?drvName(lc.chain.driver):'Người lái chưa xác định'} còn ${th} phút lái liên tục.`,null,null,t); }
+  const e = tr.plan.ev[tr.evIdx];
+  if (tr.mode==='drive' && !cf.late){
+    const target = e ? e.s : L, eta = etaTo(tr,target,t);
+    if (rem - eta < 0 && rem > 0){
+      cf.late = true;
+      const alt = nextValidStop(tr,t);
+      const can = alt && alt.stop.s < target-0.5 && alt.eta <= rem;
+      push(feed,'danger',tr,`Không kịp tới ${e?e.stop.name:DEST[tr.dir]}: còn ${Math.round(rem)} phút lái, cần khoảng ${Math.round(eta)} phút.${can?` Có thể nghỉ sớm tại ${alt.stop.name} (${Math.round(alt.eta)} phút).`:' Không còn trạm hợp lệ nào kịp tới.'}`, can?'early':null, can?{stop:alt.stop.id}:null, t);
+    }
+  }
+  if (rem < 0 && !cf.over){ cf.over = true; push(feed,'danger',tr,`${drvName(lc.chain.driver)} đã vượt 4 giờ lái liên tục. Hệ thống tự lưu tốc độ, vị trí và dữ liệu giao thông vào hồ sơ sự kiện.`,null,null,t); }
+}
+
+/* ================= kịch bản ================= */
+function setup(){
+  JAMS.push({day:-1, dir:'S', kmFrom:305, kmTo:317, start:510, end:630, factor:0.1, src:'Dữ liệu giao thông (mô phỏng): dòng xe bò chậm khoảng 7 km/h'});
+  JAMS.push({day:0, dir:'S', kmFrom:301, kmTo:313, start:505, end:625, factor:0.1, src:'Dữ liệu giao thông (mô phỏng): va chạm giao thông, dòng xe bò chậm khoảng 7 km/h'});
+  APP.tripsY = [
+    makeTrip({id:'y1', day:-1, veh:'v1', dir:'S', dep:360, drivers:['d1'], noPlan:true, plan:{ev:[], ok:false, risky:false, good:false, blind:[], viol:[], eta:0}, customer:'Cảng Cửa Lò · container 40\''}),
+    makeTrip({id:'y2', day:-1, veh:'v4', dir:'S', dep:390, drivers:['d6'], policy:'strict', customer:'Nhà máy bia Nghệ An'}),
+    makeTrip({id:'y3', day:-1, veh:'v3', dir:'S', dep:420, drivers:['d3','d4'], forced:['xc269'], skipCheckIn:true, customer:'KCN VSIP Nghệ An'}),
+    makeTrip({id:'y4', day:-1, veh:'v2', dir:'N', dep:330, drivers:['d2'], customer:'KCN Nam Cấm → kho Thanh Trì'}),
+    makeTrip({id:'y5', day:-1, veh:'v5', dir:'N', dep:540, drivers:['d7'], customer:'Cảng Cửa Lò → ICD Gia Lâm'}),
+  ];
+  const hy = hooksFor(APP.feedY);
+  for (let t=240; t<1380; t+=0.5){ for (const tr of APP.tripsY){ stepTrip(tr,t,0.5,hy); if (Math.floor(t+0.5)>Math.floor(t)) checkAlerts(tr,t+0.5,APP.feedY); } }
+  APP.tripsT = [
+    makeTrip({id:'t1', day:0, veh:'v1', dir:'S', dep:360, drivers:['d1'], policy:'early', customer:'Cảng Cửa Lò · container 40\''}),
+    makeTrip({id:'t2', day:0, veh:'v2', dir:'N', dep:330, drivers:['d2'], customer:'KCN Nam Cấm → kho Thanh Trì'}),
+    makeTrip({id:'t3', day:0, veh:'v3', dir:'S', dep:420, drivers:['d3','d4'], forced:['xc269'], skipCheckIn:true, customer:'KCN VSIP Nghệ An'}),
+    makeTrip({id:'t4', day:0, veh:'v4', dir:'S', dep:390, drivers:['d5'], policy:'strict', customer:'Nhà máy bia Nghệ An'}),
+    makeTrip({id:'t5', day:0, veh:'v5', dir:'N', dep:540, drivers:['d7'], customer:'Cảng Cửa Lò → ICD Gia Lâm'}),
+  ];
+  push(APP.feed,'ok',APP.tripsT[0],'Lệnh lập lúc 05:10 rơi vào vùng sát mốc 4 giờ (Km427 chỉ còn 6 phút dự phòng). Điều phối đã áp dụng phương án nghỉ sớm tại Trạm tạm Km329+700.',null,null,310);
+  advance(460-300, true);
+}
+const hooksT = hooksFor(APP.feed);
+function advance(dm){
+  let rem = dm;
+  while (rem > 1e-9){
+    const d = Math.min(0.5, rem), t0 = APP.t;
+    for (const tr of APP.tripsT) stepTrip(tr, t0, d, hooksT);
+    APP.t += d; rem -= d;
+    if (Math.floor(APP.t) > Math.floor(t0)) for (const tr of APP.tripsT) checkAlerts(tr, APP.t, APP.feed);
+    if (APP.t >= 1439){ APP.t = 1439; APP.playing = false; syncPlay(); break; }
+  }
+}
+
+/* ================= trạng thái chuyến ================= */
+function tripStatus(tr, t){
+  if (tr.done) return {k:'done', lbl:'Đã đến nơi', c:'c-muted', rank:9};
+  if (t < tr.dep) return {k:'wait', lbl:'Chờ xuất phát '+hm(tr.dep), c:'c-muted', rank:8};
+  const lc = liveChain(tr,t), rem = LIMIT - lc.min;
+  if (tr.mode==='dwell'){ const e = tr.plan.ev[tr.evIdx-1]; return {k:'rest', lbl: e&&e.swap ? 'Đang đổi tài' : 'Đang nghỉ', c:'c-rest', rank:7, rem:LIMIT, until:tr.dwellUntil}; }
+  if (tr.cur===null) return {k:'unk', lbl:'Chưa nhận ca', c:'c-unk', rank:1, rem};
+  if (rem < 0) return {k:'over', lbl:'Đã vượt 4 giờ', c:'c-danger', rank:0, rem};
+  const e = tr.plan.ev[tr.evIdx], target = e ? e.s : L, eta = etaTo(tr,target,t), slack = rem - eta;
+  if (slack < 0) return {k:'late', lbl:'Không kịp', c:'c-danger', rank:2, rem, eta, slack, e};
+  if (slack < 15) return {k:'tight', lbl:'Sát giờ', c:'c-warn', rank:3, rem, eta, slack, e};
+  return {k:'ok', lbl:'Trong kế hoạch', c:'c-safe', rank: rem<60?4:5, rem, eta, slack, e};
+}
+
+/* ================= sơ đồ lý trình ================= */
+const CITY = [[176,'Hà Nội'],[211,'Cầu Giẽ'],[261,'Cao Bồ'],[339,'QL45'],[382,'Nghi Sơn'],[432,'Diễn Châu'],[468,'Vinh']];
+function strip({dir, plan, trip, day, t, exits=false, compact=false}){
+  const W = 1000, X0 = 30, X1 = 970, x = km => X0 + sAt(dir,km)/L*(X1-X0);
+  const H = compact ? 150 : 178, ry = compact ? 66 : 82;
+  let g = '';
+  for (const sg of SEGS){ const a = x(sg.from), b = x(sg.to); g += `<rect class="road ${sg.type==='hw'?'hw':''}" x="${Math.min(a,b)}" y="${ry-5}" width="${Math.abs(b-a)}" height="10" rx="2"/>`; }
+  for (const j of JAMS) if (j.day===day && j.dir===dir){ const a=x(j.kmFrom), b=x(j.kmTo); g += `<rect x="${Math.min(a,b)}" y="${ry-11}" width="${Math.max(3,Math.abs(b-a))}" height="22" rx="3" fill="var(--jam)" opacity=".55"><title>Ùn tắc ${hm(j.start)}–${hm(j.end)}</title></rect>`; }
+  if (plan) for (const b of plan.blind){
+    const a = x(b.kmA), c = x(b.kmB), col = b.type==='hard' ? 'var(--danger)' : 'var(--warn)';
+    g += `<rect x="${Math.min(a,c)}" y="${ry-14}" width="${Math.abs(c-a)}" height="28" rx="4" fill="${col}" opacity=".2" stroke="${col}" stroke-dasharray="4 3"/>`;
+    g += `<text x="${(a+c)/2}" y="${ry-19}" text-anchor="middle" style="fill:${col};font-weight:700">${b.type==='hard'?'Vùng mù tuân thủ':'Cửa sổ nghỉ trống'}</text>`;
+    const p = x(b.km4); g += `<line x1="${p}" x2="${p}" y1="${ry-16}" y2="${ry+16}" stroke="var(--danger)" stroke-width="2.5"/><text x="${p}" y="${ry+30}" text-anchor="middle" style="fill:var(--danger);font-weight:700">4 giờ</text>`;
+  }
+  const pool = (exits ? ALL_STOPS : STOPS).filter(s=>serves(s,dir));
+  pool.forEach((s,i)=>{
+    const px = x(s.km), off = (i%2) ? 18 : 0;
+    const cls = s.kind==='official' ? `fill="var(--accent)" stroke="var(--surface)" stroke-width="2"` : s.kind==='temp' ? `fill="var(--surface)" stroke="var(--accent)" stroke-width="2.5"` : `fill="var(--surface)" stroke="var(--muted)" stroke-width="2" stroke-dasharray="3 2"`;
+    g += `<circle cx="${px}" cy="${ry}" r="7" ${cls}><title>${esc(s.name)} · ${kmTxt(s.km)}</title></circle>`;
+    if (!compact) g += `<text x="${px}" y="${ry+30+off}" text-anchor="middle">${kmTxt(s.km).replace('+','+')}</text>`;
+  });
+  if (plan) plan.ev.forEach((e,i)=>{
+    const px = x(e.km), up = ry-30-(i%2)*20;
+    const col = e.kind==='late' ? 'var(--danger)' : e.kind==='tight' ? 'var(--warn)' : e.swap ? 'var(--unk)' : 'var(--safe)';
+    g += `<line x1="${px}" x2="${px}" y1="${ry-8}" y2="${up+4}" stroke="${col}" stroke-width="2"/><circle cx="${px}" cy="${ry}" r="4" fill="${col}"/>`;
+    g += `<text x="${px}" y="${up}" text-anchor="middle" class="lbl-b" style="fill:${col}">${hm(e.arr)} ${e.swap?'đổi tài':'nghỉ'}</text>`;
+  });
+  if (plan) for (const v of plan.viol){ if (plan.blind.some(b=>Math.abs(b.km4-v.km)<0.5)) continue; const p=x(v.km); g += `<line x1="${p}" x2="${p}" y1="${ry-16}" y2="${ry+16}" stroke="var(--danger)" stroke-width="2.5"/><text x="${p}" y="${ry+30}" text-anchor="middle" style="fill:var(--danger);font-weight:700">4 giờ</text>`; }
+  const cy = H-8;
+  CITY.forEach(([km,n],i)=>{ const px = x(km), anc = i===0 ? (dir==='S'?'start':'end') : i===CITY.length-1 ? (dir==='S'?'end':'start') : 'middle'; g += `<text x="${px}" y="${cy}" text-anchor="${anc}" class="${i===0||i===CITY.length-1?'lbl-b':''}">${n}</text>`; });
+  if (trip){
+    const st = tripStatus(trip,t), px = x(kmAt(trip.dir,trip.s));
+    const col = {done:'var(--muted)', wait:'var(--muted)', rest:'var(--rest)', unk:'var(--unk)', over:'var(--danger)', late:'var(--danger)', tight:'var(--warn)', ok:'var(--safe)'}[st.k];
+    g += `<g transform="translate(${px},${ry})"><path d="M-10,-26 h20 v14 l-10,9 l-10,-9z" fill="${col}" stroke="var(--surface)" stroke-width="1.5"/><text y="-32" text-anchor="middle" class="lbl-b" style="fill:${col}">${esc(trip.plate)}</text></g>`;
+  }
+  return `<div class="strip-wrap"><svg class="strip" viewBox="0 0 ${W} ${H}" role="img" aria-label="Sơ đồ lý trình ${DIRS[dir]}">${g}</svg></div>`;
+}
+
+/* ================= K1: lập lệnh ================= */
+function fillForm(){
+  $('#fVeh').innerHTML = VEHICLES.map(v=>`<option value="${v.id}">${v.plate} · ${VT[v.vt].name}</option>`).join('');
+  $('#fVeh').value = 'v6';
+  const dopt = DRIVERS.map(d=>`<option value="${d.id}">${d.name} (${d.points} điểm)</option>`).join('');
+  $('#fD1').innerHTML = dopt; $('#fD1').value = 'd6';
+  $('#fD2').innerHTML = '<option value="">Không có</option>'+dopt;
+}
+function formOrder(){
+  const veh = vehOf($('#fVeh').value), d1 = $('#fD1').value, d2 = $('#fD2').value;
+  const [h,m] = ($('#fDep').value||'06:00').split(':').map(Number);
+  return {veh:veh.id, plate:veh.plate, vt:veh.vt, dir:$('#fDir').value, dep:h*60+m, drivers: d2 && d2!==d1 ? [d1,d2] : [d1],
+          pre:Math.min(200,Math.max(0,+$('#fPre').value||0)), buffer:Math.min(60,Math.max(0,+$('#fBuf').value||0)), customer:$('#fCus').value};
+}
+const orderOpts = fo => ({dir:fo.dir, dep:fo.dep, vt:fo.vt, drivers:fo.drivers.length, pre:fo.pre, buffer:fo.buffer, win:60});
+function shownPlan(){ const r = APP.res; if (!r) return null; if (APP.applied){ const o = r.opts.find(x=>x.key===APP.applied); if (o && o.plan) return o.plan; } return r.base; }
+function renderPlan(){
+  const fo = formOrder(); APP.fo = fo;
+  APP.res = planOptions(orderOpts(fo));
+  if (APP.applied && !APP.res.opts.some(o=>o.key===APP.applied && o.plan)) APP.applied = null;
+  const r = APP.res, b = r.base, p = shownPlan();
+  let v;
+  const bl = b.blind[0];
+  if (b.good) v = `<div class="verdict good"><b>Khả thi: ${b.ev.length} lần ${fo.drivers.length>1?'đổi tài':'dừng nghỉ'}, đến ${DEST[fo.dir]} khoảng ${hm(b.eta)}</b><span class="sub">Mọi điểm nghỉ đều nằm trong cửa sổ an toàn trước mốc 4 giờ.</span></div>`;
+  else if (bl && bl.type==='tight') v = `<div class="verdict tight"><b>Rủi ro cao: cửa sổ nghỉ không có trạm hợp lệ</b><span>Mốc 4 giờ rơi vào ${kmTxt(bl.km4)} lúc ${hm(bl.t4)}. Cửa sổ nghỉ an toàn ${kmTxt(Math.min(bl.kmA,bl.kmB))}–${kmTxt(Math.max(bl.kmA,bl.kmB))} (${hm(bl.tA)}–${hm(bl.tB)}) không có trạm${bl.invalid.length?': '+bl.invalid.map(x=>`${x.stop.name} ${x.why}`).join('; '):''}. Trạm kế tiếp là ${esc(bl.tightStop.name)}, chỉ còn ${Math.round(bl.margin)} phút dự phòng: chậm hơn ${Math.round(bl.margin)} phút là vi phạm.</span></div>`;
+  else v = `<div class="verdict hard"><b>Vùng mù tuân thủ: giữ nguyên lệnh này thì chắc chắn vi phạm</b><span>Mốc 4 giờ rơi vào ${kmTxt(bl.km4)} lúc ${hm(bl.t4)}, không có trạm hợp lệ nào trước đó${bl.invalid.length?' ('+bl.invalid.map(x=>`${x.stop.name} ${x.why}`).join('; ')+')':''}. Nếu chạy tiếp, tài xế vượt 4 giờ khoảng ${Math.round(b.viol[0].over)} phút.</span></div>`;
+  const rows = p.ev.map(e=>`<tr><td class="n">${hm(e.arr)}</td><td>${esc(e.stop.name)}<div class="sub">${e.swap?'Đổi tài: '+(fo.drivers[e.from]?drvName(fo.drivers[e.from]):'tài xế phụ')+' → '+(fo.drivers[e.to]?drvName(fo.drivers[e.to]):'tài xế phụ'):'Nghỉ '+e.dwell+' phút'}${e.stop.kind==='exit'?' · rời cao tốc':''}${e.backup?' · dự phòng: '+esc(e.backup.name):''}</div></td><td class="n">${kmTxt(e.km)}</td><td class="n">${dur(e.chainAtArr)}</td><td><span class="chip ${e.kind==='late'?'c-danger':e.kind==='tight'?'c-warn':'c-safe'}">${{window:'Trong cửa sổ',early:'Nghỉ sớm',tight:'Sát mốc 4 giờ',late:'Sau mốc 4 giờ',forced:'Theo chỉ định'}[e.kind]}</span></td><td class="n">${e.free}/${e.stop.cap}</td></tr>`).join('');
+  let opts = '';
+  if (r.opts.length){
+    opts = `<div style="display:grid;gap:8px"><div class="eyebrow">Phương án khắc phục (tính sẵn)</div><div class="opts">` + r.opts.map(o=>{
+      if (!o.plan) return `<div class="opt"><h3>${o.title}</h3><div class="meta">${esc(o.detail)}</div></div>`;
+      const d = Math.round(o.plan.eta - b.eta);
+      return `<div class="opt ${APP.applied===o.key?'on':''}"><h3>${o.title}</h3><div class="meta">${esc(o.detail)}</div><div><span class="eta">${hm(o.plan.eta)}</span> <span class="sub">đến nơi · ${d===0?'không đổi':(d>0?'+':'')+d+' phút'} so với lệnh gốc</span></div><div class="meta">${esc(o.cost)}</div><button class="btn ${APP.applied===o.key?'primary':''}" data-apply="${o.key}">${APP.applied===o.key?'Đang áp dụng':'Áp dụng'}</button></div>`;
+    }).join('') + `</div></div>`;
+  }
+  const busy = APP.tripsT.find(t=>t.veh===fo.veh && !t.done);
+  const ready = p.ok && !busy;
+  $('#planCard').innerHTML = `
+    <div class="card-h"><h2>Kế hoạch dừng nghỉ theo tọa độ</h2><span class="sub">${esc(fo.plate)} · ${DIRS[fo.dir]} · xuất phát ${hm(fo.dep)}</span></div>
+    <div style="display:grid;gap:14px">
+      ${v}
+      ${strip({dir:fo.dir, plan:p, day:0, exits:APP.applied==='exit'})}
+      ${APP.applied?`<div class="note">Đang hiển thị phương án: <b>${r.opts.find(o=>o.key===APP.applied).title}</b>. <button class="btn ghost" data-apply="">Xem lại lệnh gốc</button></div>`:''}
+      <div class="tbl-wrap"><table><thead><tr><th>Dự kiến</th><th>Điểm dừng</th><th>Lý trình</th><th>Đã lái</th><th>Đánh giá</th><th>Chỗ trống</th></tr></thead><tbody>${rows||'<tr><td colspan="6" class="empty">Chuyến ngắn hơn 4 giờ lái, không cần dừng nghỉ.</td></tr>'}</tbody></table></div>
+      ${opts}
+      <div class="row"><button class="btn primary" id="btnCommit" ${ready?'':'disabled'}>Chốt lệnh và gửi xuống app tài xế</button>
+      <span class="sub">${busy?`Xe ${esc(fo.plate)} đang chạy chuyến khác hôm nay, hãy chọn xe khác.`:p.ok?(p.risky?'Có thể chốt, nhưng nên chọn một phương án khắc phục.':'Kế hoạch sẽ được nạp xuống app tài xế.'):'Hãy chọn một phương án khắc phục trước khi chốt.'}</span></div>
+    </div>`;
+  renderHeat(fo);
+}
+const heatCache = {};
+function renderHeat(fo){
+  const key = [fo.dir,fo.vt,fo.drivers.length,fo.pre,fo.buffer].join('|');
+  if (!heatCache[key]) heatCache[key] = Array.from({length:24},(_,h)=>{ const p = planTrip({...orderOpts(fo), dep:h*60, policy:'strict'}); return p.good?'good':p.ok?'tight':'hard'; });
+  const arr = heatCache[key], cur = Math.floor(fo.dep/60);
+  $('#heat').innerHTML = arr.map((c,h)=>`<button class="${c}" data-hour="${h}" aria-current="${h===cur}" title="Xuất phát ${String(h).padStart(2,'0')}:00">${h}</button>`).join('');
+  const nGood = arr.filter(c=>c==='good').length;
+  $('#heatSub').textContent = `${DIRS[fo.dir]} · ${VT[fo.vt].name} · ${nGood}/24 giờ xuất phát có kế hoạch an toàn`;
+}
+function commitOrder(){
+  const fo = APP.fo, r = APP.res;
+  const opt = APP.applied ? r.opts.find(o=>o.key===APP.applied) : null;
+  let dep = opt && opt.key==='shift' ? fo.dep + opt.offset : fo.dep;
+  let note = '';
+  if (dep < APP.t + 2){ dep = Math.ceil(APP.t) + 5; note = ` Giờ xuất phát đã qua nên được dời sang ${hm(dep)}.`; }
+  const pol = opt && (opt.key==='early' || opt.key==='two') ? 'early' : 'strict';
+  const nDrv = opt && opt.key==='two' ? 2 : fo.drivers.length;
+  const drivers = nDrv===2 && fo.drivers.length===1 ? [fo.drivers[0], DRIVERS.find(d=>d.id!==fo.drivers[0] && !APP.tripsT.some(t=>!t.done && t.drivers.includes(d.id))).id] : fo.drivers;
+  const o = {dir:fo.dir, dep, vt:fo.vt, drivers:nDrv, pre:fo.pre, buffer:fo.buffer, win:60, policy:pol, allowExits: opt && opt.key==='exit'};
+  const plan = planTrip(o), base = planTrip({...o, drivers:fo.drivers.length, policy:'strict', allowExits:false, dep:fo.dep});
+  const id = 'n'+(++APP.newCount);
+  const tr = makeTrip({id, day:0, veh:fo.veh, dir:fo.dir, dep, drivers, plan, basePlan:base, customer:fo.customer});
+  APP.tripsT.push(tr);
+  push(APP.feed,'ok',tr,`Đã chốt lệnh ${DIRS[fo.dir]}, xuất phát ${hm(dep)}, ${plan.ev.length} điểm ${nDrv>1?'đổi tài':'nghỉ'}. Kế hoạch đã nạp xuống app của ${drivers.map(drvName).join(' và ')}.${note}`);
+  APP.sel = id; APP.drvSel = id; renderTripCard(true); renderPlan();
+}
+
+/* ================= bảng đội xe ================= */
+function renderFleet(){
+  const t = APP.t;
+  const rows = APP.tripsT.map(tr=>({tr, st:tripStatus(tr,t)})).sort((a,b)=>a.st.rank-b.st.rank || (a.st.slack??999)-(b.st.slack??999));
+  $('#fleet').innerHTML = `<thead><tr><th>Xe · tuyến</th><th>Trạng thái</th><th>Tài xế</th><th>Lái liên tục</th><th>Điểm dừng kế tiếp</th><th>Vị trí</th></tr></thead><tbody>` + rows.map(({tr,st})=>{
+    const lc = liveChain(tr,t), pct = Math.min(100, lc.min/LIMIT*100), col = pct>=100?'var(--danger)':pct>=75?'var(--warn)':'var(--safe)';
+    const e = tr.plan.ev[tr.evIdx];
+    const mismatch = tr.card && tr.cur!==tr.card && !tr.done && t>=tr.dep && tr.mode==='drive';
+    return `<tr class="click ${APP.sel===tr.id?'sel':''}" data-trip="${tr.id}">
+      <td><span class="plate">${esc(tr.plate)}</span><div class="sub">${DIRS[tr.dir]}</div></td>
+      <td><span class="chip ${st.c}">${st.lbl}</span>${st.slack!=null&&st.k!=='ok'?`<div class="sub">${st.slack<0?'thiếu':'dư'} ${Math.abs(Math.round(st.slack))} phút</div>`:''}</td>
+      <td>${t<tr.dep?`<span class="sub">${esc(drvName(tr.drivers[0]))}</span>`:tr.done?esc(drvName(tr.drivers[tr.drivers.length-1])):tr.cur?esc(drvName(tr.cur)):'<span class="chip c-unk">Chưa nhận ca</span>'}${mismatch?`<div class="sub">Thẻ GSHT: ${esc(drvName(tr.card))}</div>`:''}</td>
+      <td class="n">${t<tr.dep||tr.done?'—':dur(lc.min)}${t<tr.dep||tr.done?'':`<div class="bar" style="--c:${col}"><i style="width:${pct}%"></i></div>`}</td>
+      <td>${e&&!tr.done?`${esc(e.stop.name)}<div class="sub">${t<tr.dep?'dự kiến '+hm(e.arr):tr.mode==='dwell'?'':'còn khoảng '+Math.round(etaTo(tr,e.s,t))+' phút'}</div>`:tr.done?'—':`Về đích ${DEST[tr.dir]}`}</td>
+      <td class="n">${t<tr.dep?'—':kmTxt(kmAt(tr.dir,tr.s))}<div class="sub" style="font-family:var(--f-body);font-size:12px">${t<tr.dep?'':esc(segAt(kmAt(tr.dir,tr.s)).name)}</div></td></tr>`;
+  }).join('') + '</tbody>';
+}
+function renderTripCard(full){
+  const tr = tripById(APP.sel); if (!tr) return;
+  const t = APP.t, st = tripStatus(tr,t);
+  if (full || !$('#tcLive')){
+    $('#tripCard').innerHTML = `<div class="card-h"><h2 id="tcTitle"></h2><span class="sub" id="tcSub"></span></div><div id="tcLive"></div>
+      <div class="row" style="margin-top:10px"><button class="btn" data-act="open-driver">Mở app tài xế của xe này</button><button class="btn" data-act="jam">Tạo ùn tắc phía trước (demo)</button><button class="btn" data-act="early-now">Cho nghỉ sớm tại trạm gần nhất</button></div>`;
+  }
+  $('#tcTitle').textContent = `${tr.plate} · ${DIRS[tr.dir]}`;
+  $('#tcSub').textContent = `${tr.customer} · ${VT[tr.vt].name} · xuất phát ${hm(tr.dep)}`;
+  const lc = liveChain(tr,t);
+  $('#tcLive').innerHTML = strip({dir:tr.dir, plan:tr.plan, trip:tr, day:0, t, compact:true}) +
+    `<div class="row" style="justify-content:space-between;margin-top:6px"><span><span class="chip ${st.c}">${st.lbl}</span> ${tr.cur?esc(drvName(tr.cur)):'Chưa có tài xế nhận ca'}</span><span class="sub">Lái liên tục ${dur(lc.min)} · tốc độ ${Math.round(tr.v)} km/h · dự kiến đến ${hm(tr.plan.eta)}</span></div>`;
+}
+
+/* ================= feed ================= */
+const LV = {info:['c-accent','Thông tin'], warn:['c-warn','Chú ý'], danger:['c-danger','Khẩn'], unk:['c-unk','Ca lái'], ok:['c-safe','Đã xử lý']};
+function renderFeed(){
+  if (APP.renderedFeed===APP.feedVer) return; APP.renderedFeed = APP.feedVer;
+  const items = APP.feed.slice(0,40);
+  $('#feed').innerHTML = items.length ? items.map(it=>`<li><span class="tm">${hm(it.t)}</span><div><span class="chip ${LV[it.lvl][0]}">${it.plate||LV[it.lvl][1]}</span> ${esc(it.text)}${it.action && !it.done ? `<div class="act"><button class="btn" data-feed="${it.id}">${it.action==='early'?'Gửi chỉ đạo: nghỉ sớm':'Mở app để nhận ca'}</button></div>`:''}</div></li>`).join('') : '<li class="empty">Chưa có thông báo.</li>';
+}
+function earlyStop(tr, stopId){
+  const t = APP.t;
+  const cand = stopId ? STOPS.find(s=>s.id===stopId) : null;
+  const ns = cand ? {stop:{...cand, s:sAt(tr.dir,cand.km)}} : nextValidStop(tr,t);
+  const e = tr.plan.ev[tr.evIdx];
+  if (!ns || tr.mode!=='drive' || (e && ns.stop.s >= e.s-0.5)) { push(APP.feed,'info',tr,'Không có trạm hợp lệ nào sớm hơn điểm nghỉ đã lên kế hoạch.'); return; }
+  const eta = etaTo(tr, ns.stop.s, t);
+  tr.plan.ev.splice(tr.evIdx, 0, {stop:ns.stop, kind:'live', s:ns.stop.s, km:ns.stop.km, arr:t+eta, dep:t+eta+20, dwell:20, chainAtArr:liveChain(tr,t).min+eta, swap:false, occ:occAt(ns.stop,t+eta), free:freeSlots(ns.stop,t+eta), backup:null});
+  tr.earlyAdds++;
+  push(APP.feed,'ok',tr,`Điều phối chỉ đạo nghỉ sớm tại ${ns.stop.name} (khoảng ${Math.round(eta)} phút nữa). App tài xế đã cập nhật.`);
+}
+
+/* ================= K2–K3: app tài xế ================= */
+function renderTripPick(){
+  $('#tripPick').innerHTML = APP.tripsT.map(tr=>`<button class="pill-btn" data-pick="${tr.id}" aria-pressed="${APP.drvSel===tr.id}">${esc(tr.plate)}</button>`).join('');
+}
+function phoneShell(){
+  $('#phone').innerHTML = `<div id="phLive"></div>
+    <div class="p-btns"><button class="p-btn main" id="pIn">Nhận ca</button><button class="p-btn" id="pOut">Kết ca</button></div>
+    <div id="phForm"></div>`;
+}
+function renderPhone(){
+  const tr = tripById(APP.drvSel); if (!tr) return;
+  if (!$('#phLive')) phoneShell();
+  const t = APP.t, st = tripStatus(tr,t), lc = liveChain(tr,t);
+  const rem = LIMIT - lc.min, frac = Math.max(0, Math.min(1, rem/LIMIT));
+  const col = {done:'#8d99a6', wait:'#8d99a6', rest:'#8fa7c0', unk:'#ad8ae8', over:'#ff6a5f', late:'#ff6a5f', tight:'#f0b43c', ok:'#4fd08f'}[st.k];
+  let big = dur(Math.max(0,rem)), cap = 'lái liên tục còn lại';
+  if (st.k==='wait'){ big = hm(tr.dep); cap = 'giờ xuất phát'; }
+  if (st.k==='rest'){ big = Math.max(0,Math.ceil(tr.dwellUntil-t))+"'"; cap = 'thời gian nghỉ còn lại'; }
+  if (st.k==='done'){ big = '✓'; cap = 'đã đến nơi'; }
+  if (st.k==='over'){ big = '+'+dur(-rem); cap = 'đã vượt 4 giờ'; }
+  const R = 86, C = 2*Math.PI*R;
+  const e = tr.plan.ev[tr.evIdx];
+  let next = '';
+  if (!tr.done && e){
+    const eta = t<tr.dep ? null : etaTo(tr,e.s,t), dist = e.s-tr.s;
+    const okk = eta==null ? null : rem-eta;
+    next = `<div class="p-card"><div class="lbl">${e.swap?'Điểm đổi tài':'Điểm nghỉ theo kế hoạch'}</div><div class="ttl">${esc(e.stop.name)}</div>
+      <div class="meta">${kmTxt(e.km)} · cách ${vn(dist,0)} km${eta!=null?` · khoảng ${Math.round(eta)} phút`:''} · ~${freeSlots(e.stop, eta!=null?t+eta:e.arr)}/${e.stop.cap} chỗ trống</div>
+      ${okk==null||tr.mode==='dwell'?'':okk>=0?`<div class="ok-txt"><b>Vào kịp</b> · dư ${Math.round(okk)} phút</div>`:`<div class="bad-txt"><b>Không kịp</b> · thiếu ${Math.round(-okk)} phút</div>`}</div>`;
+    if (tr.mode==='drive'){ const nv = nextValidStop(tr,t); if (nv && nv.stop.id!==e.stop.id && nv.stop.s<e.s) next += `<div class="p-card"><div class="lbl">Trạm hợp lệ gần nhất</div><div class="ttl">${esc(nv.stop.name)}</div><div class="meta">cách ${vn(nv.dist,0)} km · khoảng ${Math.round(nv.eta)} phút · ${nv.eta<=rem?'<span class="ok-txt">vào kịp</span>':'<span class="bad-txt">không kịp</span>'}</div></div>`; }
+  }
+  const al = APP.feed.filter(f=>f.trip===tr.id && ['warn','danger','unk'].includes(f.lvl)).slice(0,2);
+  const unk = tr.mode==='drive' && !tr.cur && t>=tr.dep;
+  const statusTxt = {done:'Đã đến nơi', wait:'Chờ xuất phát', rest:tr.plan.ev[tr.evIdx-1]&&tr.plan.ev[tr.evIdx-1].swap?'Đang đổi tài':'Đang nghỉ – chuỗi lái được ngắt sau 15 phút', unk:'Chưa có ai nhận ca', over:'Đã vượt 4 giờ lái liên tục', late:'Không kịp tới điểm nghỉ', tight:'Sát giờ – chuẩn bị vào trạm', ok:'Trong kế hoạch'}[st.k];
+  $('#phLive').innerHTML = `
+    <div class="p-top"><span>${esc(tr.plate)} · ${DIRS[tr.dir]}</span><span class="num" style="font-size:15px">${hm(t)}</span></div>
+    <div class="p-card" style="padding:9px 12px">${tr.cur?`<div class="meta">Ca lái: <b style="color:#e9eef3">${esc(drvName(tr.cur))}</b> · từ ${hm(([...tr.shifts].reverse().find(s=>s.driver===tr.cur&&s.end==null)||{start:tr.dep}).start)}</div>`:`<div class="meta" style="color:#c9b2f2"><b>Chưa có tài xế nhận ca</b>${tr.card?` · thẻ GSHT: ${esc(drvName(tr.card))}`:''}</div>`}</div>
+    ${unk?`<div class="p-alert" style="background:#3a2a5c;color:#e6dbff">Xe đang chạy nhưng chưa ai nhận ca. Tài xế đang lái hãy bấm <b>Nhận ca</b> và cắm thẻ nhận dạng.</div>`:''}
+    <div class="ring"><svg viewBox="0 0 200 200" aria-hidden="true"><circle cx="100" cy="100" r="${R}" fill="none" stroke="#232b35" stroke-width="12"/><circle cx="100" cy="100" r="${R}" fill="none" stroke="${col}" stroke-width="12" stroke-linecap="round" stroke-dasharray="${C*frac} ${C}" transform="rotate(-90 100 100)"/></svg>
+      <div class="mid"><div class="big" style="color:${col}">${big}</div><div class="cap">${cap}</div></div></div>
+    <div class="p-status" style="background:${col}22;color:${col}">${statusTxt}</div>
+    ${al.map(a=>`<div class="p-alert" style="background:${a.lvl==='danger'?'#4a1f1c':a.lvl==='unk'?'#3a2a5c':'#4a3a12'};color:${a.lvl==='danger'?'#ffd2cd':a.lvl==='unk'?'#e6dbff':'#ffe6b0'}"><span class="num" style="opacity:.8">${hm(a.t)}</span> · ${esc(a.text)}</div>`).join('')}
+    ${next}`;
+  const canIn = !tr.done && !tr.cur && t>=tr.dep, canOut = !!tr.cur && (tr.mode!=='drive' || tr.v<1);
+  $('#pIn').disabled = !canIn; $('#pOut').disabled = !canOut;
+  $('#pOut').title = canOut ? '' : 'Chỉ kết ca khi xe đã dừng';
+}
+function openHandover(){
+  const tr = tripById(APP.drvSel); if (!tr) return;
+  APP.handover = tr.id;
+  const opts = [...new Set([...tr.drivers, ...DRIVERS.map(d=>d.id)])].map(id=>`<option value="${id}">${esc(drvName(id))}</option>`).join('');
+  const sug = tr.drivers.find(d=>d!==tr.card) || tr.drivers[0];
+  $('#phForm').innerHTML = `<form class="p-form" id="hoForm">
+    <b>Nhận ca lái</b>
+    <label>Tài xế nhận ca<select id="hoDrv">${opts}</select></label>
+    <label>Mốc lý trình hiện tại<input type="text" id="hoKm" value="${kmTxt(kmAt(tr.dir,tr.s))}" readonly style="background:#0d1116;border:1px solid #333d49;border-radius:8px;padding:8px;color:#e9eef3"></label>
+    <label>Ảnh chụp đồng hồ công-tơ-mét (bằng chứng bàn giao)<input type="file" id="hoPhoto" accept="image/*" capture="environment"></label>
+    <span class="chk"><input type="checkbox" id="hoCard" checked> <label for="hoCard" style="display:inline">Tôi đã cắm thẻ nhận dạng lái xe của mình vào thiết bị GSHT</label></span>
+    <div class="p-btns"><button type="submit" class="p-btn main">Xác nhận nhận ca</button><button type="button" class="p-btn" id="hoCancel">Huỷ</button></div>
+  </form>`;
+  $('#hoDrv').value = sug;
+  $('#hoCancel').onclick = () => { APP.handover = null; $('#phForm').innerHTML=''; };
+  $('#hoForm').onsubmit = async ev => {
+    ev.preventDefault();
+    const d = $('#hoDrv').value, card = $('#hoCard').checked, f = $('#hoPhoto').files[0];
+    let photo = null;
+    if (f){ try { photo = await thumb(f); } catch(e){} }
+    const tr2 = tripById(APP.handover); if (!tr2) return;
+    startShift(tr2, d, APP.t, {photo, card, by:'Tài xế xác nhận trên app'});
+    tr2.flags.fixed = true; tr2.flags.unkAlert = false; tr2.flags.unkSince = null;
+    APP.feed.filter(x=>x.trip===tr2.id && x.action==='checkin').forEach(x=>x.done=true);
+    push(APP.feed,'ok',tr2,`${drvName(d)} đã nhận ca tại ${kmTxt(kmAt(tr2.dir,tr2.s))}${photo?', có ảnh công-tơ-mét':''}${card?', đã thay thẻ GSHT':'. Chưa thay thẻ GSHT: dữ liệu GSHT vẫn ghi người cũ'}.`);
+    APP.handover = null; $('#phForm').innerHTML = ''; renderDriverSide();
+  };
+}
+function thumb(file){
+  return new Promise((res,rej)=>{ const im = new Image(); im.onload = () => { const c = document.createElement('canvas'), k = 120/Math.max(im.width,im.height); c.width = im.width*k; c.height = im.height*k; c.getContext('2d').drawImage(im,0,0,c.width,c.height); res(c.toDataURL('image/jpeg',.7)); URL.revokeObjectURL(im.src); }; im.onerror = rej; im.src = URL.createObjectURL(file); });
+}
+function renderDriverSide(){
+  const tr = tripById(APP.drvSel); if (!tr) return;
+  const t = APP.t;
+  $('#drvPlan').innerHTML = `<div class="card-h"><h2>Kế hoạch đã nạp xuống app</h2><span class="sub">${esc(tr.plate)} · ${drvName(tr.drivers[0])}${tr.drivers[1]?' + '+drvName(tr.drivers[1]):''}</span></div>` +
+    strip({dir:tr.dir, plan:tr.plan, trip:tr, day:0, t, compact:true}) +
+    `<div class="tbl-wrap"><table><thead><tr><th>Dự kiến</th><th>Điểm dừng</th><th>Lý trình</th><th>Tình trạng</th></tr></thead><tbody>${tr.plan.ev.map((e,i)=>`<tr><td class="n">${hm(e.arr)}</td><td>${esc(e.stop.name)}<div class="sub">${e.swap?'Đổi tài':e.kind==='live'?'Chỉ đạo nghỉ sớm từ điều phối':'Nghỉ '+Math.max(e.dwell,20)+' phút'}</div></td><td class="n">${kmTxt(e.km)}</td><td>${i<tr.evIdx?(i===tr.evIdx-1&&tr.mode==='dwell'?'<span class="chip c-rest">Đang ở trạm</span>':'<span class="chip c-muted">Đã qua</span>'):i===tr.evIdx?'<span class="chip c-accent">Đang tới</span>':'<span class="chip c-muted">Sắp tới</span>'}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">Không có điểm dừng.</td></tr>'}</tbody></table></div>`;
+  $('#shiftTbl').innerHTML = `<thead><tr><th>Tài xế</th><th>Nhận ca</th><th>Kết ca</th><th>Thẻ GSHT</th><th>Ảnh</th><th>Xác nhận</th></tr></thead><tbody>${tr.shifts.map(s=>`<tr><td>${esc(drvName(s.driver))}</td><td class="n">${hm(s.start)}<div class="sub">${kmTxt(s.startKm)}</div></td><td class="n">${s.end==null?'—':hm(s.end)}<div class="sub">${s.end==null?'đang trong ca':kmTxt(s.endKm)}</div></td><td>${s.card?'<span class="chip c-safe">Đã thay</span>':'<span class="chip c-warn">Chưa thay</span>'}</td><td>${s.photo?`<img src="${s.photo}" alt="Ảnh công-tơ-mét lúc nhận ca" style="width:48px;border-radius:4px">`:'<span class="sub">—</span>'}</td><td class="sub">${esc(s.by)}</td></tr>`).join('')||'<tr><td colspan="6" class="empty">Chưa có ca lái.</td></tr>'}</tbody>`;
+  const rec = tr.records.slice(-6).reverse();
+  $('#gshtTbl').innerHTML = `<thead><tr><th>Giờ</th><th>Lý trình</th><th>Tốc độ</th><th>Thẻ trên GSHT</th><th>Ca trên app</th></tr></thead><tbody>${rec.map(r=>`<tr><td class="n">${hm(r.t)}</td><td class="n">${kmTxt(r.km)}</td><td class="n">${Math.round(r.v)} km/h</td><td>${esc(drvName(r.gsht))}</td><td>${r.app?esc(drvName(r.app)):'<span class="chip c-unk">Không ai</span>'}${r.app!==r.gsht&&r.v>=2?' <span class="chip c-warn">Lệch</span>':''}</td></tr>`).join('')||'<tr><td colspan="5" class="empty">Xe chưa xuất phát.</td></tr>'}</tbody>`;
+}
+
+/* ================= K3–K4: đối soát ================= */
+const CLS = {plan:['c-danger','Lỗi lập kế hoạch'], objective:['c-jam','Trở ngại khách quan'], data:['c-unk','Lỗi dữ liệu']};
+const FINE = {drv:[3,5], org:[8,12]};
+function dayTrips(){ return APP.auditDay===-1 ? APP.tripsY : APP.tripsT; }
+function dayDate(){ return APP.auditDay===-1 ? yday : today; }
+function scan(){
+  APP.cases = reconcile(dayTrips());
+  if (!APP.cases.some(c=>c.id===APP.caseSel)) APP.caseSel = APP.cases[0] ? APP.cases[0].id : null;
+  renderAudit();
+}
+function renderAudit(){
+  const trips = dayTrips(), cases = APP.cases, feed = APP.auditDay===-1 ? APP.feedY : APP.feed;
+  const started = trips.filter(t=>t.records.length);
+  const feasible = trips.filter(t=>!t.noPlan && t.plan.ok && !t.plan.risky).length;
+  const warns = feed.filter(f=>['warn','danger','unk'].includes(f.lvl)).length;
+  const finable = cases.filter(c=>c.cls!=='data');
+  const prevented = trips.filter(t=>(t.base && !t.base.good && t.plan.good) || (t.earlyAdds>0 && !cases.some(c=>c.trip===t))).length;
+  const rng = (n,[a,b]) => n ? `${a*n}–${b*n}` : '0';
+  $('#kpis').innerHTML = [
+    [`${feasible}/${trips.length}`, 'Chuyến có kế hoạch nghỉ khả thi', trips.some(t=>t.noPlan)?'Có lệnh lập thủ công, không có kế hoạch nghỉ':'Mọi lệnh đều qua SmartRoute'],
+    [warns, 'Cảnh báo phát ra trước khi vi phạm', 'Gồm mốc còn 60/30/15 phút, không kịp tới trạm, chưa nhận ca'],
+    [cases.length, 'Vi phạm phát hiện qua tự đối soát', cases.length?Object.keys(CLS).map(k=>`${cases.filter(c=>c.cls===k).length} ${CLS[k][1].toLowerCase()}`).join(' · '):'Không có chuỗi lái nào vượt 4 giờ'],
+    [prevented, 'Vi phạm đã phòng ngừa', `Tương đương ${rng(prevented,[FINE.drv[0]+FINE.org[0],FINE.drv[1]+FINE.org[1]])} triệu đồng tiền phạt`],
+    [`${rng(finable.length,[FINE.drv[0]+FINE.org[0],FINE.drv[1]+FINE.org[1]])}`, 'Triệu đồng có thể bị phạt nếu không giải trình', `${finable.length*2} điểm GPLX có nguy cơ bị trừ`],
+  ].map(([v,k,s])=>`<div class="kpi"><div class="v">${v}</div><div class="k">${k}</div><div class="sub" style="margin-top:4px">${s}</div></div>`).join('');
+  $('#scanSub').textContent = `${dstr(dayDate())} · ${started.length} chuyến · quét theo cùng logic tính chuỗi lái của dữ liệu GSHT`;
+  $('#cases').innerHTML = `<thead><tr><th>Xe</th><th>Tài xế theo GSHT</th><th>Chuỗi lái</th><th>Vượt</th><th>Phân loại</th></tr></thead><tbody>` + (cases.length ? cases.map(c=>`<tr class="click ${APP.caseSel===c.id?'sel':''}" data-case="${c.id}"><td><b>${esc(c.trip.plate)}</b><div class="sub">${DIRS[c.trip.dir]}</div></td><td>${esc(drvName(c.chain.driver))}</td><td class="n">${hm(c.chain.start)}–${hm(c.chain.end)}<div class="sub" style="font-family:var(--f-body);font-size:12px">${dur(c.chain.dur)} liên tục</div></td><td class="n">+${Math.round(c.over)}'</td><td><span class="chip ${CLS[c.cls][0]}">${CLS[c.cls][1]}</span></td></tr>`).join('') : '<tr><td colspan="5" class="empty">Không phát hiện chuỗi lái nào vượt 4 giờ.</td></tr>') + '</tbody>';
+  renderTimesheet();
+  renderDossier();
+}
+function timesheetRows(){
+  const trips = dayTrips(), cases = APP.cases;
+  return DRIVERS.map(d=>{
+    const ch = trips.flatMap(tr=>computeChains(tr.records,'app').filter(c=>c.driver===d.id).map(c=>({...c, plate:tr.plate})));
+    const total = ch.reduce((a,c)=>a+c.dur,0), longest = ch.reduce((a,c)=>Math.max(a,c.dur),0);
+    const plates = [...new Set(ch.map(c=>c.plate))];
+    const v = cases.filter(c=>c.chain.driver===d.id && c.cls!=='data').length;
+    const gshtOnly = cases.filter(c=>c.chain.driver===d.id && c.cls==='data').length;
+    return {d, total, longest, plates, v, gshtOnly, risk:Math.max(0,d.points-2*v)};
+  });
+}
+function renderTimesheet(){
+  const rows = timesheetRows();
+  $('#timesheet').innerHTML = `<thead><tr><th>Tài xế</th><th>Điểm GPLX</th><th>Xe đã lái</th><th>Tổng giờ lái</th><th>Chuỗi dài nhất</th><th>Vi phạm</th></tr></thead><tbody>` + rows.map(r=>{
+    const lv = r.d.points<=4 ? 'low' : r.d.points<=8 ? 'mid' : '';
+    return `<tr><td class="who"><b>${esc(r.d.name)}</b><div class="sub">Hạng ${r.d.cls}${r.d.note?' · '+esc(r.d.note):''}</div></td>
+      <td><div class="pts ${lv}" title="${r.d.points}/12 điểm">${Array.from({length:12},(_,i)=>`<i class="${i<r.d.points?'':'off'}"></i>`).join('')}</div><div class="sub">${r.d.points}/12${r.v?` → còn ${r.risk} nếu bị phạt`:''}</div></td>
+      <td class="plate" style="font-weight:400">${r.plates.length?r.plates.map(esc).join('<br>'):'<span class="sub">—</span>'}</td>
+      <td class="n">${r.total?dur(r.total):'—'}</td>
+      <td class="n" style="${r.longest>LIMIT?'color:var(--danger)':''}">${r.longest?dur(r.longest):'—'}</td>
+      <td>${r.v?`<span class="chip c-danger">${r.v} vi phạm</span>`:''}${r.gshtOnly?`<span class="chip c-unk" title="GSHT gán sai, ca lái trên app cho thấy không vi phạm">${r.gshtOnly} do gán sai</span>`:''}${!r.v&&!r.gshtOnly?'<span class="sub">—</span>':''}</td></tr>`;
+  }).join('') + '</tbody>';
+  const low = rows.filter(r=>r.d.points<=4), atRisk = rows.filter(r=>r.v && r.risk<=4 && r.d.points>4);
+  $('#teamWarn').innerHTML = (low.length||atRisk.length) ? `<div class="verdict tight" style="margin-top:12px"><b>Quỹ điểm GPLX của đội xe</b><span>${low.map(r=>`${esc(r.d.name)} chỉ còn ${r.d.points}/12 điểm`).join('; ')}${atRisk.length?'; '+atRisk.map(r=>`${esc(r.d.name)} sẽ còn ${r.risk} điểm nếu bị phạt`).join('; '):''}. Tài xế bị trừ hết 12 điểm thì không được lái xe cho đến khi kiểm tra lại kiến thức pháp luật. Nên ưu tiên phân công tuyến không có vùng mù cho các tài xế này.</span></div>` : '';
+}
+function speedChart(c, pal){
+  const recs = c.trip.records.filter(r=>r.t>=c.chain.start-20 && r.t<=c.chain.end+10);
+  if (!recs.length) return '';
+  const W = 720, H = 220, X0 = 40, X1 = W-12, Y0 = 18, Y1 = H-30;
+  const t0 = recs[0].t, t1 = recs[recs.length-1].t, x = t => X0+(t-t0)/((t1-t0)||1)*(X1-X0), y = v => Y1-(Math.min(100,v)/100)*(Y1-Y0);
+  let g = '';
+  for (const v of [0,40,80]) g += `<line x1="${X0}" x2="${X1}" y1="${y(v)}" y2="${y(v)}" stroke="${pal.grid}" stroke-width="1"/><text x="${X0-6}" y="${y(v)+4}" text-anchor="end" fill="${pal.muted}">${v}</text>`;
+  let inJ = null; const spans = [];
+  for (const r of recs){ if (r.jam && inJ==null) inJ = r.t; if (!r.jam && inJ!=null){ spans.push([inJ,r.t]); inJ=null; } }
+  if (inJ!=null) spans.push([inJ,t1]);
+  for (const [a,b] of spans) g += `<rect x="${x(a)}" y="${Y0}" width="${Math.max(2,x(b)-x(a))}" height="${Y1-Y0}" fill="${pal.jam}" opacity=".22"/><text x="${(x(a)+x(b))/2}" y="${Y0+12}" text-anchor="middle" fill="${pal.jam}" font-weight="700">Ùn tắc</text>`;
+  for (let h=Math.ceil(t0/60)*60; h<=t1; h+=60) g += `<line x1="${x(h)}" x2="${x(h)}" y1="${Y1}" y2="${Y1+4}" stroke="${pal.muted}"/><text x="${x(h)}" y="${Y1+17}" text-anchor="middle" fill="${pal.muted}">${hm(h)}</text>`;
+  g += `<line x1="${x(c.chain.start)}" x2="${x(c.chain.start)}" y1="${Y0}" y2="${Y1}" stroke="${pal.muted}" stroke-dasharray="3 3"/><text x="${x(c.chain.start)+4}" y="${Y1-6}" fill="${pal.muted}">bắt đầu chuỗi</text>`;
+  const lim = c.chain.start+LIMIT; g += `<line x1="${x(lim)}" x2="${x(lim)}" y1="${Y0}" y2="${Y1}" stroke="${pal.danger}" stroke-width="2"/><text x="${x(lim)-4}" y="${Y0+26}" text-anchor="end" fill="${pal.danger}" font-weight="700">mốc 4 giờ ${hm(lim)}</text>`;
+  g += `<polyline fill="none" stroke="${pal.line}" stroke-width="2" points="${recs.map(r=>`${x(r.t).toFixed(1)},${y(r.v).toFixed(1)}`).join(' ')}"/>`;
+  g += `<text x="${X0}" y="${Y0-6}" fill="${pal.muted}">km/h</text>`;
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Biểu đồ tốc độ trong chuỗi lái">${g}</svg>`;
+}
+const PAL_UI = {grid:'var(--line)', muted:'var(--muted)', jam:'var(--jam)', danger:'var(--danger)', line:'var(--accent)'};
+const PAL_DOC = {grid:'#d8dee5', muted:'#5b6672', jam:'#c77d00', danger:'#c3352b', line:'#1f5fbf'};
+function dossierParts(c, pal){
+  const tr = c.trip, ch = c.chain, jam = JAMS.find(j=>j.day===tr.day && j.dir===tr.dir && j.start<ch.end && j.end>ch.start);
+  const jr = c.recs.filter(r=>r.jam && r.v>=2), avgJam = jr.length ? jr.reduce((a,r)=>a+r.v,0)/jr.length : 0;
+  const shifts = tr.shifts.map(s=>`${drvName(s.driver)}: nhận ca ${hm(s.start)} (${kmTxt(s.startKm)})${s.end!=null?`, kết ca ${hm(s.end)} (${kmTxt(s.endKm)})`:''} · thẻ GSHT ${s.card?'đã thay':'chưa thay'} · ${s.photo?'có ảnh công-tơ-mét':'không có ảnh'}`);
+  const planTxt = tr.noPlan ? 'Không có. Lệnh lập thủ công, chưa qua SmartRoute.' : (tr.plan.ev.map(e=>`${hm(e.arr)} ${e.stop.name} (${kmTxt(e.km)})`).join('; ') || 'Không cần dừng nghỉ');
+  const rec = {
+    objective:'Nộp hồ sơ này kèm văn bản giải trình khi nhận thông báo phạt nguội, căn cứ ngoại lệ "trở ngại khách quan" tại Điều 64 Luật Trật tự, an toàn giao thông đường bộ.',
+    data:'Bổ sung biên bản bàn giao ca và ảnh công-tơ-mét; gửi kèm khi giải trình. Nhắc tài xế thay thẻ nhận dạng mỗi lần đổi tài.',
+    plan:'Không có căn cứ giải trình. Đưa tuyến và giờ xuất phát này về bước lập kế hoạch để hiệu chỉnh, bổ sung vào bản đồ vùng mù.'}[c.cls];
+  const rows = [
+    ['Xe', `${tr.plate} · ${VT[tr.vt].name}`], ['Tuyến', `${DIRS[tr.dir]} · ${tr.customer}`],
+    ['Tài xế theo GSHT', drvName(ch.driver)], ['Chuỗi lái', `${hm(ch.start)} (${kmTxt(ch.startKm)}) → ${hm(ch.end)} (${kmTxt(ch.endKm)}), ${fmtDur(ch.dur)}`],
+    ['Vượt mốc 4 giờ', `${Math.round(c.over)} phút, từ ${hm(ch.start+LIMIT)}`],
+    ['Kế hoạch nghỉ đã lập', planTxt], ['Ca lái trên app', shifts.join('<br>')||'Không có'],
+  ];
+  if (jam && jr.length) rows.push(['Dữ liệu ùn tắc', `${kmTxt(Math.min(jam.kmFrom,jam.kmTo))}–${kmTxt(Math.max(jam.kmFrom,jam.kmTo))}, ${hm(jam.start)}–${hm(jam.end)}. Tốc độ trung bình của xe trong đoạn ùn tắc ${vn(avgJam,1)} km/h; làm chậm khoảng ${Math.round(c.jamDelay)} phút. Nguồn: ${jam.src}.`]);
+  return {rows, chart:speedChart(c,pal), rec};
+}
+function renderDossier(){
+  const c = APP.cases.find(x=>x.id===APP.caseSel);
+  if (!c){ $('#dossier').innerHTML = `<div class="card-h"><h2>Hồ sơ sự kiện</h2></div><p class="empty">Chọn một trường hợp trong bảng kết quả quét để xem hồ sơ.</p>`; return; }
+  const d = dossierParts(c, PAL_UI);
+  const tuned = APP.tuned.includes(c.id);
+  $('#dossier').innerHTML = `<div class="card-h"><h2>Hồ sơ sự kiện ${esc(c.id)}</h2><span class="chip ${CLS[c.cls][0]}">${CLS[c.cls][1]}</span></div>
+    <div class="dossier">
+      <div class="note">${esc(c.reason)}</div>
+      <div class="tbl-wrap">${d.chart}</div>
+      <dl>${d.rows.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
+      <div class="verdict ${c.cls==='plan'?'hard':c.cls==='data'?'tight':'good'}"><b>Đề xuất xử lý</b><span>${esc(d.rec)}</span></div>
+      <div class="row"><button class="btn primary" data-act="export">Xuất hồ sơ giải trình (HTML)</button>${c.cls==='plan'?`<button class="btn" data-act="tune" ${tuned?'disabled':''}>${tuned?'Đã đưa về hiệu chỉnh kế hoạch':'Đưa tuyến về hiệu chỉnh kế hoạch'}</button>`:''}<span class="sub" id="exMsg"></span></div>
+    </div>`;
+}
+function dossierHtml(c){
+  const d = dossierParts(c, PAL_DOC);
+  return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Hồ sơ sự kiện ${esc(c.id)}</title>
+<style>body{font-family:"Be Vietnam Pro",system-ui,sans-serif;color:#141a21;max-width:820px;margin:32px auto;padding:0 20px;line-height:1.5}h1{font-size:22px;margin:0 0 4px}.sub{color:#5b6672;font-size:13px}dl{display:grid;grid-template-columns:180px 1fr;gap:8px 14px;font-size:14px}dt{color:#5b6672}dd{margin:0}.box{border:1px solid #d8dee5;border-radius:10px;padding:12px 14px;margin:16px 0}svg{width:100%;height:auto}svg text{font-size:11px;font-family:inherit}.tag{display:inline-block;padding:2px 10px;border-radius:999px;background:#eef1f4;font-weight:600;font-size:13px}</style></head><body>
+<p class="sub">SmartRoute · Hồ sơ sự kiện phục vụ giải trình · lập tự động lúc ${new Date().toLocaleString('vi-VN')}</p>
+<h1>Hồ sơ ${esc(c.id)} · ${esc(c.trip.plate)}</h1>
+<p class="sub">Ngày ${dstr(c.trip.day<0?yday:today)} · <span class="tag">${CLS[c.cls][1]}</span></p>
+<div class="box">${esc(c.reason)}</div>
+<h2 style="font-size:16px">Tốc độ xe trong chuỗi lái</h2>${d.chart}
+<dl>${d.rows.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
+<div class="box"><b>Đề xuất xử lý</b><br>${esc(d.rec)}</div>
+<p class="sub">Căn cứ: Điều 64 Luật Trật tự, an toàn giao thông đường bộ 2024 (sửa đổi bởi Luật 118/2025/QH15); QCVN 31:2014/BGTVT (dừng, đỗ từ 15 phút trở lên thì ngắt chuỗi lái); Nghị định 168/2024/NĐ-CP. Dữ liệu trong hồ sơ là dữ liệu mô phỏng của bản MVP.</p>
+</body></html>`;
+}
+async function save(filename, data, msgEl){
+  let dl = null;
+  try { dl = window.claude && window.claude.use ? await window.claude.use('downloads') : null; } catch(e){}
+  try {
+    if (dl){ await dl.save({filename, data}); }
+    else { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([data],{type:filename.endsWith('.csv')?'text/csv':'text/html'})); a.download = filename; document.body.appendChild(a); a.click(); a.remove(); }
+    if (msgEl) msgEl.textContent = 'Đã xuất ' + filename;
+  } catch(e){ if (msgEl) msgEl.textContent = e && e.code==='declined' ? 'Đã huỷ xuất file.' : 'Không xuất được file ở chế độ xem này.'; }
+}
+
+/* ================= điều hướng & vòng lặp ================= */
+function setView(v){
+  APP.view = v;
+  $$('.tabs button').forEach(b=>b.setAttribute('aria-selected', String(b.dataset.view===v)));
+  ['dispatch','driver','audit','gap'].forEach(k=>$('#v-'+k).hidden = k!==v);
+  if (v==='driver'){ renderTripPick(); renderPhone(); renderDriverSide(); }
+  if (v==='audit') scan();
+  if (v==='dispatch'){ renderFleet(); renderTripCard(true); APP.renderedFeed=-1; renderFeed(); }
+  window.scrollTo({top:0});
+}
+function syncPlay(){ const b = $('#btnPlay'); b.textContent = APP.playing ? 'Tạm dừng' : 'Chạy tiếp'; b.setAttribute('aria-pressed', String(!APP.playing)); }
+function renderClock(){ $('#clk').textContent = hm(APP.t); $('#clkDay').innerHTML = `${dstr(today).replace(/^./,c=>c.toUpperCase())}<br>giờ mô phỏng · ×${APP.mult}`; }
+function renderLive(){
+  renderClock();
+  if (APP.view==='dispatch'){ renderFleet(); renderTripCard(false); renderFeed(); }
+  if (APP.view==='driver'){ renderPhone(); renderDriverSide(); }
+}
+function frame(ts){
+  requestAnimationFrame(frame);
+  const dt = APP.lastReal ? Math.min(0.25,(ts-APP.lastReal)/1000) : 0; APP.lastReal = ts;
+  if (APP.playing && dt>0) advance(dt*APP.mult/60);
+  if (ts-APP.lastUi > 350){ APP.lastUi = ts; renderLive(); }
+}
+
+/* sự kiện */
+$$('.tabs button').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
+$('#btnPlay').addEventListener('click',()=>{ APP.playing = !APP.playing; if (APP.t>=1439) APP.playing=false; syncPlay(); });
+$$('#speedGrp button').forEach(b=>b.addEventListener('click',()=>{ APP.mult = +b.dataset.mult; $$('#speedGrp button').forEach(x=>x.setAttribute('aria-pressed',String(x===b))); renderClock(); }));
+$('#btnSkip').addEventListener('click',()=>{ advance(30); renderLive(); });
+['#fVeh','#fD1','#fD2','#fDir','#fDep','#fPre','#fBuf'].forEach(s=>$(s).addEventListener('change',()=>{ APP.applied=null; renderPlan(); }));
+$('#fVeh').addEventListener('change',()=>{ const v = vehOf($('#fVeh').value); $('#fCus').value = v.vt==='container' ? 'Cảng Cửa Lò · container 40\'' : 'Hàng tiêu dùng · kho Vinh'; });
+$('#planCard').addEventListener('click', e=>{
+  const a = e.target.closest('[data-apply]'); if (a){ APP.applied = a.dataset.apply || null; if (APP.applied===null) APP.applied=null; renderPlan(); return; }
+  if (e.target.closest('#btnCommit')) commitOrder();
+});
+$('#heat').addEventListener('click', e=>{ const b = e.target.closest('[data-hour]'); if (!b) return; $('#fDep').value = String(b.dataset.hour).padStart(2,'0')+':00'; APP.applied=null; renderPlan(); });
+$('#fleet').addEventListener('pointerdown', e=>{ const r = e.target.closest('[data-trip]'); if (!r) return; APP.sel = r.dataset.trip; renderFleet(); renderTripCard(true); });
+$('#tripCard').addEventListener('click', e=>{
+  const b = e.target.closest('[data-act]'); if (!b) return; const tr = tripById(APP.sel); if (!tr) return;
+  if (b.dataset.act==='open-driver'){ APP.drvSel = tr.id; setView('driver'); }
+  if (b.dataset.act==='jam'){
+    if (tr.done || APP.t<tr.dep){ push(APP.feed,'info',tr,'Xe chưa chạy hoặc đã đến nơi, không tạo ùn tắc.'); renderFeed(); return; }
+    const sgn = tr.dir==='S'?1:-1, km = kmAt(tr.dir,tr.s);
+    JAMS.push({day:0, dir:tr.dir, kmFrom:km+2*sgn, kmTo:km+9*sgn, start:Math.floor(APP.t), end:Math.floor(APP.t)+75, factor:0.12, src:'Ùn tắc tạo thủ công trong bản demo'});
+    push(APP.feed,'warn',tr,`Đã tạo ùn tắc ${kmTxt(Math.min(km+2*sgn,km+9*sgn))}–${kmTxt(Math.max(km+2*sgn,km+9*sgn))} trong 75 phút phía trước xe.`);
+  }
+  if (b.dataset.act==='early-now') earlyStop(tr, null);
+  renderFeed();
+});
+$('#feed').addEventListener('click', e=>{
+  const b = e.target.closest('[data-feed]'); if (!b) return;
+  const it = APP.feed.find(x=>x.id===b.dataset.feed); if (!it) return; const tr = tripById(it.trip);
+  if (it.action==='early'){ it.done = true; earlyStop(tr, it.data && it.data.stop); }
+  if (it.action==='checkin'){ APP.drvSel = tr.id; setView('driver'); openHandover(); }
+  APP.feedVer++; renderFeed();
+});
+$('#tripPick').addEventListener('click', e=>{ const b = e.target.closest('[data-pick]'); if (!b) return; APP.drvSel = b.dataset.pick; APP.handover=null; $('#phForm') && ($('#phForm').innerHTML=''); renderTripPick(); renderPhone(); renderDriverSide(); });
+$('#phone').addEventListener('click', e=>{
+  if (e.target.closest('#pIn')) openHandover();
+  if (e.target.closest('#pOut')){ const tr = tripById(APP.drvSel); if (tr && tr.cur){ const n = drvName(tr.cur); endShift(tr, APP.t); push(APP.feed,'info',tr,`${n} kết ca tại ${kmTxt(kmAt(tr.dir,tr.s))}.`); renderPhone(); renderDriverSide(); } }
+});
+$$('[data-day]').forEach(b=>b.addEventListener('click',()=>{ APP.auditDay = +b.dataset.day; $$('[data-day]').forEach(x=>x.setAttribute('aria-pressed',String(x===b))); APP.caseSel=null; scan(); }));
+$('#btnScan').addEventListener('click', scan);
+$('#cases').addEventListener('click', e=>{ const r = e.target.closest('[data-case]'); if (!r) return; APP.caseSel = r.dataset.case; renderAudit(); });
+$('#dossier').addEventListener('click', e=>{
+  const b = e.target.closest('[data-act]'); if (!b) return; const c = APP.cases.find(x=>x.id===APP.caseSel); if (!c) return;
+  if (b.dataset.act==='export') save(`ho-so-${c.id}.html`, dossierHtml(c), $('#exMsg'));
+  if (b.dataset.act==='tune'){ APP.tuned.push(c.id); push(APP.feed,'ok',c.trip,`Đối soát: tuyến ${DIRS[c.trip.dir]} xuất phát ${hm(c.trip.dep)} được đưa về bước lập kế hoạch. Lệnh mới trên tuyến này sẽ bị kiểm tra vùng mù.`); renderDossier(); }
+});
+$('#btnCsv').addEventListener('click', e=>{
+  const rows = timesheetRows();
+  const csv = '﻿' + 'tai_xe,hang_gplx,diem_gplx,xe_da_lai,tong_gio_lai_phut,chuoi_dai_nhat_phut,vi_pham\n' + rows.map(r=>[r.d.name,r.d.cls,r.d.points,r.plates.join(' / '),Math.round(r.total),Math.round(r.longest),r.v].join(',')).join('\n') + '\n';
+  save(`cham-gio-lai-${(APP.auditDay===-1?yday:today).toISOString().slice(0,10)}.csv`, csv, null);
+});
+
+/* khởi động */
+fillForm();
+setup();
+renderPlan();
+syncPlay(); renderClock();
+setView('dispatch');
+requestAnimationFrame(frame);
+window.__sr = APP;
+})();
+
+</script>
+
+</body>
+</html>

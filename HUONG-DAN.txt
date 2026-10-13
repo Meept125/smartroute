@@ -1,0 +1,21 @@
+SMARTROUTE MVP – tuyến thí điểm Hà Nội – Vinh
+
+Thư mục gồm:
+- index.html : app chính (Điều phối K1, App tài xế K2–K3, Đối soát & hồ sơ K3–K4)
+- cu-ly.html : module cảnh báo cự ly an toàn K5 (camera + GPS)
+- model/     : mô hình nhận diện xe cho module K5 (bắt buộc giữ nguyên)
+
+Đưa lên GitHub Pages (miễn phí, cần để dùng camera/GPS trên điện thoại):
+1. Tạo repository Public trên github.com, ví dụ: smartroute-mvp
+2. "uploading an existing file" > kéo thả TOÀN BỘ nội dung thư mục này > Commit changes
+3. Settings > Pages > Deploy from a branch > main, / (root) > Save
+4. Sau 1–2 phút: https://<tên-github>.github.io/smartroute-mvp/
+
+Gợi ý kịch bản demo (khoảng 5 phút, tốc độ ×60):
+1. Điều phối: lệnh mặc định (container, Hà Nội → Vinh, 06:00) báo "Rủi ro cao". Bấm Áp dụng từng phương án để so sánh, bấm vào bản đồ vùng mù để đổi giờ.
+2. Theo dõi đội xe: xe 29C-777.01 sẽ gặp ùn tắc Km301–313 lúc ~08:25 và nhận cảnh báo "Không kịp".
+3. Xe 37C-089.12 đổi tài ở Xuân Cương lúc ~09:03 nhưng tài xế mới không nhận ca: có cảnh báo tím, bấm "Mở app để nhận ca" để xử lý.
+4. Đối soát: tab "Hôm qua" có sẵn 3 loại vi phạm (lỗi kế hoạch, trở ngại khách quan, lỗi dữ liệu). Mở hồ sơ, bấm Xuất hồ sơ.
+5. K5: mở module cự ly ở chế độ mô phỏng.
+
+Lưu ý: toàn bộ số liệu vận hành là mô phỏng. Vị trí 5 trạm dừng nghỉ theo báo chí 12/2025; sức chứa, giờ mở trạm tạm và 2 điểm dừng ngoài cao tốc là giả định, cần khảo sát.
